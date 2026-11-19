@@ -35,6 +35,7 @@ import {
 import { Button } from "@/button";
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from "@/dialog";
 import { Switch } from "@/switch";
+import { UserMenu } from "@/lib/user-menu";
 import { api, type VerificationResult } from "@/lib/api";
 import {
   claims as defaultClaims,
@@ -491,16 +492,19 @@ function Index() {
                 <Download />
                 Export Audit Report
               </Button>
+              <UserMenu />
             </nav>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="mobile-only"
-              aria-label="Open menu"
-              onClick={() => setModal("menu")}
-            >
-              <Menu />
-            </Button>
+            <div className="mobile-only flex items-center gap-2">
+              <UserMenu />
+              <Button
+                variant="ghost"
+                size="icon"
+                aria-label="Open menu"
+                onClick={() => setModal("menu")}
+              >
+                <Menu />
+              </Button>
+            </div>
           </>
         ) : (
           <>
@@ -514,16 +518,19 @@ function Index() {
                 Academic Trust Guidelines
                 <ArrowUpRight />
               </Button>
+              <UserMenu />
             </nav>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="mobile-only"
-              aria-label="Open menu"
-              onClick={() => setModal("menu")}
-            >
-              <Menu />
-            </Button>
+            <div className="mobile-only flex items-center gap-2">
+              <UserMenu />
+              <Button
+                variant="ghost"
+                size="icon"
+                aria-label="Open menu"
+                onClick={() => setModal("menu")}
+              >
+                <Menu />
+              </Button>
+            </div>
           </>
         )}
       </header>
@@ -1542,6 +1549,10 @@ function Index() {
                   <ShieldCheck />
                   Academic Trust Guidelines
                 </Button>
+                <div className="pt-2 border-t border-border flex items-center justify-between">
+                  <span className="text-xs text-muted-foreground font-medium">Account</span>
+                  <UserMenu />
+                </div>
               </div>
             </>
           ) : modal === "upload" ? (

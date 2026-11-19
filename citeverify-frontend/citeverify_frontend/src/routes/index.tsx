@@ -245,6 +245,7 @@ function Index() {
     setFilter("all");
     setQuery("");
     setStep(0);
+    setIsLiveAnalysis(true);
     setStepMessage("Uploading document and checking format…");
     setScreen("processing");
     try {

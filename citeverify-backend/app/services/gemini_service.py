@@ -88,7 +88,7 @@ class GeminiService:
         if self.api_key:
             try:
                 import google.genai as genai
-                self._client = genai.Client(api_key=self.api_key, http_options={"api_version": "v1beta"})
+                self._client = genai.Client(api_key=self.api_key, http_options={"api_version": "v1beta", "timeout": 15000})
                 logger.info(f"GeminiService initialized with model: {self.model}")
             except Exception as e:
                 logger.warning(f"Failed to initialize google-genai Client: {e}")
@@ -101,12 +101,12 @@ class GeminiService:
             if not self.api_key:
                 raise ValueError("GEMINI_API_KEY environment variable is not configured.")
             import google.genai as genai
-            self._client = genai.Client(api_key=self.api_key, http_options={"api_version": "v1beta"})
+            self._client = genai.Client(api_key=self.api_key, http_options={"api_version": "v1beta", "timeout": 15000})
         return self._client
 
     def _call_gemini_api(self, contents: str, config: dict):
         models_to_try = [self.model]
-        for fallback in ["gemini-3.8-flash", "gemini-2.5-flash", "gemini-2.0-flash"]:
+        for fallback in ["gemini-3.8-flash", "gemini-3.5-flash", "gemini-flash-latest"]:
             if fallback not in models_to_try:
                 models_to_try.append(fallback)
         
@@ -124,7 +124,6 @@ class GeminiService:
         if last_error:
             raise last_error
 
-    @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10), reraise=True)
     async def extract_claims(self, text: str, document_title: str = "") -> list[dict]:
         if not text or len(text.strip()) < 50:
             logger.warning("Text too short for claim extraction.")

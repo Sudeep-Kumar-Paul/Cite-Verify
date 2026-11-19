@@ -32,10 +32,17 @@ class ClaimExtractionService:
             )
 
         body_text = document.body_text or document.extracted_text
-        raw_claims = await self.gemini_service.extract_claims(
-            text=body_text,
-            document_title=document.document_title or "",
-        )
+        raw_claims = []
+        try:
+            raw_claims = await self.gemini_service.extract_claims(
+                text=body_text,
+                document_title=document.document_title or "",
+            )
+        except Exception as e:
+            logger.warning(f"AI claim extraction unavailable or timed out ({e}). Using deterministic extraction fallback.")
+
+        if not raw_claims:
+            raw_claims = self._extract_deterministic_claims(body_text)
 
         if not raw_claims:
             logger.info(f"No claims extracted for document {document_id}.")
@@ -69,6 +76,60 @@ class ClaimExtractionService:
             db.refresh(c)
         logger.info(f"Saved {len(saved_claims)} claims for document {document_id}.")
         return saved_claims
+
+    def _extract_deterministic_claims(self, text: str) -> list[dict]:
+        """
+        Deterministic rule-based scientific claim extractor.
+        Identifies sentences with citation markers and empirical scientific findings.
+        """
+        import re
+        claims = []
+        if not text:
+            return claims
+
+        citation_re = re.compile(
+            r'(\[\d+(?:[,\s–-]+\d+)*\]|\([A-Z][a-zA-Z\s]+(?:et al\.?)?,?\s*(?:19|20)\d{2}\))'
+        )
+        finding_re = re.compile(
+            r'\b(?:demonstrated|achieved|reduced|increased|found|showed|outperformed|reported|observed|concluded|indicated|improved|correlated|associated|synthesized|exhibited|accuracy|auc|p\s*[<=]|%)\b',
+            re.IGNORECASE,
+        )
+
+        paragraphs = text.split("\n\n")
+        para_idx = 0
+
+        for para in paragraphs:
+            para = para.strip()
+            if not para or len(para) < 30:
+                continue
+            para_idx += 1
+
+            sentences = re.split(r'(?<=[.!?])\s+', para)
+            for sentence in sentences:
+                sentence = sentence.strip()
+                if len(sentence) < 25:
+                    continue
+
+                markers = citation_re.findall(sentence)
+                has_finding = bool(finding_re.search(sentence))
+
+                if markers or has_finding:
+                    clean_text = sentence.replace("\n", " ").strip()
+                    claims.append({
+                        "claim_text": clean_text,
+                        "citation_markers": markers,
+                        "page_number": max(1, para_idx // 4),
+                        "paragraph": para_idx,
+                        "category": "finding" if has_finding else "methodology",
+                        "extraction_explanation": f"Extracted via deterministic scientific claim analysis with citation markers {markers}." if markers else "Extracted empirical quantitative finding.",
+                    })
+
+                if len(claims) >= 15:
+                    break
+            if len(claims) >= 15:
+                break
+
+        return claims
 
     def get_claims(self, db: Session, document_id: str) -> list[Claim]:
         return db.query(Claim).filter(Claim.document_id == document_id).all()

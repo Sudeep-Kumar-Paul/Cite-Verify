@@ -161,12 +161,15 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
 
   if (authTokenProvider && !headers.has("Authorization")) {
     try {
-      const token = await authTokenProvider();
+      const token = await Promise.race([
+        authTokenProvider(),
+        new Promise<null>((resolve) => setTimeout(() => resolve(null), 1200)),
+      ]);
       if (token) {
         headers.set("Authorization", `Bearer ${token}`);
       }
     } catch {
-      // Continue without token if provider fails
+      // Continue without token if provider fails or times out
     }
   }
 

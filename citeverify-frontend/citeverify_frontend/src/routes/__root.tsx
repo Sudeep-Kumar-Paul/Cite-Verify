@@ -131,6 +131,15 @@ function RootShell({ children }: { children: ReactNode }) {
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
 
+  useEffect(() => {
+    // Firebase Auth enforces authorized domains; 'localhost' is authorized by default, but '127.0.0.1' is not.
+    // If the user visits via 127.0.0.1, auto-redirect to localhost to prevent auth/unauthorized-domain errors.
+    if (typeof window !== "undefined" && window.location.hostname === "127.0.0.1") {
+      const newUrl = window.location.href.replace("//127.0.0.1", "//localhost");
+      window.location.replace(newUrl);
+    }
+  }, []);
+
   return (
     <QueryClientProvider client={queryClient}>
       <AuthProvider>

@@ -197,9 +197,37 @@ export function AuthDialog({ open, onOpenChange, defaultTab = "signin" }: AuthDi
 
         {/* Status Alerts */}
         {error && (
-          <div className="mb-4 rounded-lg border border-destructive/20 bg-destructive/10 p-3 text-xs text-destructive flex items-start gap-2">
-            <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
-            <span>{error}</span>
+          <div className="mb-4 rounded-lg border border-destructive/20 bg-destructive/10 p-3 text-xs text-destructive space-y-2">
+            <div className="flex items-start gap-2">
+              <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
+              <span>{error}</span>
+            </div>
+            {error.includes("127.0.0.1") && (
+              <div className="flex flex-wrap items-center gap-2 pt-1 border-t border-destructive/20">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="default"
+                  className="h-7 text-xs bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                  onClick={() => {
+                    if (typeof window !== "undefined") {
+                      window.location.href = window.location.href.replace("//127.0.0.1", "//localhost");
+                    }
+                  }}
+                >
+                  Switch to http://localhost:5173
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="h-7 text-xs border-destructive/30 hover:bg-destructive/20"
+                  onClick={handleDemoSignIn}
+                >
+                  Instant Demo Sign-In
+                </Button>
+              </div>
+            )}
           </div>
         )}
 

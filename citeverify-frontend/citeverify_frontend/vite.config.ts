@@ -11,6 +11,9 @@ import path from "node:path";
 import { defineConfig } from "@lovable.dev/vite-tanstack-config";
 
 export default defineConfig({
+  nitro: {
+    preset: "node-server",
+  },
   vite: {
     server: {
       port: 5173,
@@ -24,6 +27,7 @@ export default defineConfig({
       ],
     },
     resolve: {
+      tsconfigPaths: true,
       alias: {
         "@/components/ui": path.resolve(__dirname, "./src"),
         "@/components": path.resolve(__dirname, "./src"),

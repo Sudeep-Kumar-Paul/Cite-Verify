@@ -30,15 +30,17 @@ class Settings(BaseSettings):
     gemini_api_key: str = ""
     gemini_model: str = "gemini-3.8-flash"
 
-    # CORS
-    cors_origins: Union[List[str], str] = [
+    # CORS / Allowed Origins
+    allowed_origins: Union[List[str], str] = [
+        "https://cite-verify-production.up.railway.app",
         "http://localhost:5173",
         "http://127.0.0.1:5173",
         "http://localhost:3000",
         "http://127.0.0.1:3000",
-        "http://localhost:8501",
         "http://localhost:8080",
+        "http://localhost:8000",
     ]
+    cors_origins: Union[List[str], str] = []
 
     # Upload
     max_upload_size_mb: int = 50
@@ -55,6 +57,13 @@ class Settings(BaseSettings):
     # Rate limiting
     external_api_timeout_seconds: int = 30
     max_retries: int = 3
+
+    @field_validator("allowed_origins", mode="before")
+    @classmethod
+    def parse_allowed_origins(cls, v):
+        if isinstance(v, str):
+            return [origin.strip() for origin in v.split(",") if origin.strip()]
+        return v
 
     @field_validator("cors_origins", mode="before")
     @classmethod

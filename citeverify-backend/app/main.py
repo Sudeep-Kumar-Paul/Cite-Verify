@@ -64,11 +64,17 @@ app = FastAPI(
 )
 
 # CORS middleware
-is_cors_wildcard = (
-    "*" in settings.cors_origins
-    if isinstance(settings.cors_origins, list)
-    else settings.cors_origins == "*"
-)
+def _resolve_origins() -> list[str]:
+    origins = []
+    for source in [settings.allowed_origins, settings.cors_origins]:
+        if isinstance(source, list):
+            origins.extend(source)
+        elif isinstance(source, str) and source:
+            origins.extend([s.strip() for s in source.split(",") if s.strip()])
+    return list(dict.fromkeys([o for o in origins if o]))
+
+resolved_origins = _resolve_origins()
+is_cors_wildcard = "*" in resolved_origins
 
 if is_cors_wildcard:
     app.add_middleware(
@@ -81,7 +87,7 @@ if is_cors_wildcard:
 else:
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=settings.cors_origins,
+        allow_origins=resolved_origins,
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
@@ -108,6 +114,7 @@ app.include_router(reports.router, prefix="/api/reports", tags=["Reports"])
 app.include_router(history.router, prefix="/api/history", tags=["History"])
 
 
+@app.get("/health", tags=["Health"])
 @app.get("/api/health", tags=["Health"])
 async def health_check() -> dict:
     return {

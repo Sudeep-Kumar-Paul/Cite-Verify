@@ -131,7 +131,12 @@ export interface HealthResponse {
 }
 
 export function getApiBaseUrl(): string {
-  const envUrl = typeof import.meta !== "undefined" && import.meta.env ? import.meta.env.VITE_API_BASE_URL : "";
+  const envUrl = (
+    (typeof import.meta !== "undefined" && import.meta.env
+      ? (import.meta.env.VITE_API_URL || import.meta.env.VITE_API_BASE_URL)
+      : "") || ""
+  ).trim().replace(/\/+$/, "");
+
   if (envUrl) {
     if (typeof window !== "undefined" && window.location.hostname === "127.0.0.1" && envUrl.includes("localhost")) {
       return envUrl.replace("localhost", "127.0.0.1");
@@ -196,7 +201,7 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
         throw new Error("Unable to connect to CiteVerify backend. Ensure backend is running on port 8000.");
       }
     } else {
-      throw new Error(err?.message || "Unable to connect to CiteVerify backend server.");
+      throw new Error(err?.message || `Unable to connect to CiteVerify backend at ${baseUrl}. Ensure backend service is running and accessible.`);
     }
   }
 

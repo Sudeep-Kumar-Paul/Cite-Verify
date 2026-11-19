@@ -1,0 +1,22 @@
+{
+  "name": "citeverify",
+  "version": "1.0.0",
+  "description": "CiteVerify — Verify the Science. Trust the Evidence.",
+  "scripts": {
+    "dev": "powershell -ExecutionPolicy Bypass -File ./start.ps1",
+    "dev:all": "npx concurrently -k -p \"[{name}]\" -n \"BACKEND,FRONTEND\" -c \"cyan.bold,magenta.bold\" \"npm run dev:backend\" \"npm run dev:frontend\"",
+    "dev:backend": "powershell -Command \"$env:PYTHONPATH='citeverify-backend'; cd citeverify-backend; .\\.venv\\Scripts\\python.exe -m uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload\"",
+    "dev:frontend": "cd citeverify-frontend/citeverify_frontend && npm run dev",
+    "build": "cd citeverify-frontend/citeverify_frontend && npm run build",
+    "test": "npm run test:backend && npm run test:frontend",
+    "test:backend": "powershell -Command \"$env:PYTHONPATH='citeverify-backend'; cd citeverify-backend; .\\.venv\\Scripts\\python.exe -m pytest tests\"",
+    "test:frontend": "cd citeverify-frontend/citeverify_frontend && npm run test"
+  },
+  "keywords": [
+    "citeverify",
+    "science",
+    "citation-verification",
+    "academic-integrity"
+  ],
+  "author": "CiteVerify Team"
+}

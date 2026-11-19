@@ -1,0 +1,10 @@
+{
+  "name": "citeverify-frontend-root",
+  "private": true,
+  "scripts": {
+    "dev": "npm --prefix citeverify_frontend run dev",
+    "build": "npm --prefix citeverify_frontend run build",
+    "preview": "npm --prefix citeverify_frontend run preview",
+    "test": "npm --prefix citeverify_frontend run test"
+  }
+}

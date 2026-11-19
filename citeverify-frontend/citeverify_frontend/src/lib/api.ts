@@ -131,11 +131,16 @@ export interface HealthResponse {
 }
 
 export function getApiBaseUrl(): string {
-  const envUrl = (
+  let envUrl = (
     (typeof import.meta !== "undefined" && import.meta.env
       ? (import.meta.env.VITE_API_URL || import.meta.env.VITE_API_BASE_URL)
       : "") || ""
   ).trim().replace(/\/+$/, "");
+
+  // Strip trailing /api if user accidentally appended it in VITE_API_URL
+  if (envUrl.endsWith("/api")) {
+    envUrl = envUrl.slice(0, -4).replace(/\/+$/, "");
+  }
 
   if (envUrl) {
     if (typeof window !== "undefined" && window.location.hostname === "127.0.0.1" && envUrl.includes("localhost")) {
@@ -156,8 +161,9 @@ export function setAuthTokenProvider(provider: () => Promise<string | null>) {
 }
 
 async function request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
-  const baseUrl = getApiBaseUrl().replace(/\/$/, "");
-  let url = `${baseUrl}${endpoint.startsWith("/") ? endpoint : `/${endpoint}`}`;
+  const baseUrl = getApiBaseUrl().replace(/\/+$/, "");
+  const cleanEndpoint = endpoint.startsWith("/") ? endpoint : `/${endpoint}`;
+  let url = `${baseUrl}${cleanEndpoint}`;
 
   const headers = new Headers(options.headers || {});
   if (!(options.body instanceof FormData) && !headers.has("Content-Type")) {
@@ -216,6 +222,18 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
         errorDetail = response.statusText;
       }
     }
+
+    if (response.status === 404) {
+      if (
+        typeof window !== "undefined" &&
+        (baseUrl === window.location.origin || baseUrl.includes("cite-verify-production.up.railway.app"))
+      ) {
+        errorDetail = `404 Not Found: VITE_API_URL is pointing to your frontend URL instead of the backend service. In Railway, open your Backend service -> Settings -> Networking to get its domain (e.g. https://citeverify-backend-production-xxxx.up.railway.app), set that as VITE_API_URL on the Frontend service, and redeploy.`;
+      } else {
+        errorDetail = `404 Not Found from ${url}. Ensure the backend service has finished deploying and that VITE_API_URL points to the correct backend domain.`;
+      }
+    }
+
     throw new Error(errorDetail);
   }
 

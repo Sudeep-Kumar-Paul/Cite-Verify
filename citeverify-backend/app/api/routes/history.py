@@ -19,6 +19,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
+@router.get("", include_in_schema=False)
 @router.get("/")
 async def get_history(db: Session = Depends(get_db)):
     documents = db.query(Document).order_by(Document.upload_date.desc()).all()

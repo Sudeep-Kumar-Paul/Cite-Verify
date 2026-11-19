@@ -32,6 +32,7 @@ settings = get_settings()
 router = APIRouter()
 
 
+@router.post("", response_model=DocumentResponse, status_code=status.HTTP_201_CREATED, include_in_schema=False)
 @router.post("/", response_model=DocumentResponse, status_code=status.HTTP_201_CREATED)
 async def upload_document(
     file: UploadFile = File(...),
@@ -62,6 +63,7 @@ async def upload_document(
     return document
 
 
+@router.get("", response_model=List[DocumentListItem], include_in_schema=False)
 @router.get("/", response_model=List[DocumentListItem])
 async def list_documents(db: Session = Depends(get_db)):
     return db.query(Document).order_by(Document.upload_date.desc()).all()

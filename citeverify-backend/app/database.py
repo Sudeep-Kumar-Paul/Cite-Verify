@@ -48,4 +48,24 @@ def get_db() -> Generator[Session, None, None]:
 def init_db() -> None:
     from app.models import document, claim, citation, source, verification  # noqa: F401
     Base.metadata.create_all(bind=engine)
+
+    # Safe migration check for existing SQLite tables
+    try:
+        with engine.connect() as conn:
+            # Check user_id in documents
+            res = conn.exec_driver_sql("PRAGMA table_info(documents)").fetchall()
+            doc_cols = [c[1] for c in res]
+            if "user_id" not in doc_cols:
+                conn.exec_driver_sql("ALTER TABLE documents ADD COLUMN user_id VARCHAR(128)")
+                conn.commit()
+
+            # Check matching_status in citations
+            cit_res = conn.exec_driver_sql("PRAGMA table_info(citations)").fetchall()
+            cit_cols = [c[1] for c in cit_res]
+            if "matching_status" not in cit_cols:
+                conn.exec_driver_sql("ALTER TABLE citations ADD COLUMN matching_status VARCHAR(50)")
+                conn.commit()
+    except Exception as e:
+        logger.warning(f"Database migration check notice: {e}")
+
     logger.info("Database tables created/verified.")

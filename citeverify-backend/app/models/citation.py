@@ -17,6 +17,14 @@ class Citation(Base):
     __tablename__ = "citations"
     __allow_unmapped__ = True
 
+    # Standardized matching states
+    VERIFIED_MATCH = "VERIFIED_MATCH"
+    POSSIBLE_MATCH = "POSSIBLE_MATCH"
+    DOI_MISMATCH = "DOI_MISMATCH"
+    METADATA_MISMATCH = "METADATA_MISMATCH"
+    SOURCE_NOT_FOUND = "SOURCE_NOT_FOUND"
+    HUMAN_REVIEW_REQUIRED = "HUMAN_REVIEW_REQUIRED"
+
     id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     document_id = Column(String(36), ForeignKey("documents.id", ondelete="CASCADE"), nullable=False)
     claim_id = Column(String(36), ForeignKey("claims.id", ondelete="SET NULL"), nullable=True)

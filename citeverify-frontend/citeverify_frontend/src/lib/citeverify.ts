@@ -21,7 +21,7 @@ export interface ClaimItem {
   text: string;
   citation: string;
   confidence: number;
-  page: number;
+  page: number | string;
   quote: string;
   reasoning: string;
   title: string;
@@ -29,8 +29,20 @@ export interface ClaimItem {
   doi: string;
   evidencePassages?: Array<{ text: string; page_number?: number | null; source_url?: string | null }>;
   issues?: string[];
+  limitations?: string[];
   rawVerdict?: string;
   sourceUrl?: string | null;
+  authors?: string[];
+  year?: number | null;
+  publisher?: string | null;
+  evidenceType?: string;
+  matchingStatus?: string;
+  humanReviewRequired?: boolean;
+  alignmentScore?: number;
+  alignmentTier?: string;
+  alignmentDisplay?: string;
+  isScoreable?: boolean;
+  traceabilityNodeId?: string;
 }
 export const documentTitle = "Applications of Machine Learning in Early Disease Detection";
 export const sampleFilename = "machine_learning_disease_detection.pdf";
@@ -76,19 +88,25 @@ export const claims: {
 }[] = [
   {
     id: 1,
-    status: "supported",
+    status: "partial",
     text: "Deep learning models achieved diagnostic accuracy of 94.5% in detecting early-stage diabetic retinopathy from retinal fundus images.",
     citation: "Gulshan et al., 2016",
-    confidence: 96,
+    confidence: 62,
     page: 3,
     quote:
-      "The algorithm had an area under the receiver operating curve of 0.991 for the EyePACS-1 data set and 0.990 for the Messidor-2 data set.",
+      "The algorithm had an area under the receiver operating characteristic curve (AUC) of 0.991 for the EyePACS-1 data set and 0.990 for the Messidor-2 data set.",
     reasoning:
-      "The source supports strong diagnostic performance for diabetic retinopathy detection. The reported accuracy depends on the dataset and operating threshold, so the precise figure should be checked in the full text.",
+      "Metric Mismatch: The cited paper measures Area Under the ROC Curve (AUC 0.991 for EyePACS-1, 0.990 for Messidor-2), not threshold-specific diagnostic accuracy. In medical imaging, AUC evaluates discriminative capability across all cutoffs; accuracy varies depending on the operational decision threshold selected.",
     title:
       "Development and Validation of a Deep Learning Algorithm for Detection of Diabetic Retinopathy in Retinal Fundus Photographs",
     journal: "JAMA · 2016",
     doi: "10.1001/jama.2016.17216",
+    issues: [
+      "Metric Mismatch: Claim asserts specific diagnostic accuracy (%), but source evidence measures Area Under the ROC Curve (AUC). AUC and diagnostic accuracy are fundamentally different performance metrics."
+    ],
+    alignmentScore: 62,
+    alignmentTier: "MODERATE",
+    alignmentDisplay: "62% — Moderate Evidence Alignment",
   },
   {
     id: 2,

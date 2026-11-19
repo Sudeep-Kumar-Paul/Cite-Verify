@@ -32,6 +32,7 @@ class Document(Base):
     body_text = Column(Text, nullable=True)
     references_text = Column(Text, nullable=True)
     document_title = Column(String(1000), nullable=True)
+    user_id = Column(String(128), nullable=True)
     is_scanned = Column(Boolean, default=False, nullable=False)
     extraction_error = Column(String(2000), nullable=True)
 

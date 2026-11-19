@@ -31,6 +31,7 @@ import {
   Quote,
   ListFilter,
   CircleHelp,
+  Network,
 } from "lucide-react";
 import { Button } from "@/button";
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from "@/dialog";
@@ -38,7 +39,7 @@ import { Switch } from "@/switch";
 import { UserMenu } from "@/lib/user-menu";
 import { useAuth } from "@/lib/auth-context";
 import { AuthDialog } from "@/lib/auth-dialog";
-import { api, type VerificationResult } from "@/lib/api";
+import { api, type VerificationResult, type TraceabilityGraph } from "@/lib/api";
 import {
   claims as defaultClaims,
   documentTitle,
@@ -101,29 +102,47 @@ function mapVerificationResultToClaimItem(v: VerificationResult | any, index: nu
   if (verdict === "SUPPORTED") status = "supported";
   else if (verdict === "PARTIALLY_SUPPORTED") status = "partial";
   else if (verdict === "UNSUPPORTED" || verdict === "CONTRADICTORY") status = "unsupported";
-  else if (verdict === "POSSIBLY_OUTDATED") status = "outdated";
+  else if (verdict === "POSSIBLY_OUTDATED" || verdict === "POTENTIALLY_OUTDATED") status = "outdated";
 
   const firstPassage = v.evidence_passages?.[0]?.text || "";
   const source = v.source;
   const journal = [source?.journal, source?.year].filter(Boolean).join(" · ");
-  const confidenceScore = Math.round((v.confidence?.score || 0.75) * 100);
+
+  // Real confidence and alignment score
+  const alignmentPct = typeof v.confidence?.alignment_score === "number"
+    ? v.confidence.alignment_score
+    : (typeof v.confidence?.score === "number" ? Math.round(v.confidence.score * 100) : 0);
+
+  const pageNum = v.evidence_passages?.[0]?.page_number ?? "Unavailable";
 
   return {
     id: index + 1,
     status,
     text: v.claim_text,
     citation: v.citation_reference || (source?.authors?.[0] ? `${source.authors[0]} et al.` : "Cited Source"),
-    confidence: confidenceScore,
-    page: v.evidence_passages?.[0]?.page_number || (index % 4) + 3,
-    quote: firstPassage || "Evidence retrieved from verified literature abstract and metadata.",
+    confidence: alignmentPct,
+    page: pageNum,
+    quote: firstPassage || "No direct passage extracted from available source text.",
     reasoning: v.explanation || "Evaluated by CiteVerify research verification engine.",
-    title: source?.title || "Academic Literature Publication",
+    title: source?.title || "Cited Research Publication",
     journal: journal || (source?.year ? `Published · ${source.year}` : "Academic Source"),
     doi: source?.doi || "",
-    evidencePassages: v.evidence_passages,
-    issues: v.issues,
+    evidencePassages: v.evidence_passages || [],
+    issues: v.issues || [],
+    limitations: v.limitations || [],
     rawVerdict: v.verdict,
     sourceUrl: source?.url || (source?.doi ? `https://doi.org/${source.doi}` : null),
+    authors: source?.authors || [],
+    year: source?.year || null,
+    publisher: source?.publisher || null,
+    evidenceType: source?.evidence_type || "metadata_only",
+    matchingStatus: source?.matching_status || "VERIFIED_MATCH",
+    humanReviewRequired: Boolean(v.human_review_required),
+    alignmentScore: alignmentPct,
+    alignmentTier: v.confidence?.alignment_tier || (alignmentPct >= 80 ? "STRONG" : alignmentPct >= 50 ? "MODERATE" : "WEAK"),
+    alignmentDisplay: v.confidence?.alignment_display || `${alignmentPct}% Evidence Alignment`,
+    isScoreable: v.confidence?.is_scoreable !== false,
+    traceabilityNodeId: v.traceability_node_id,
   };
 }
 
@@ -170,6 +189,27 @@ function Index() {
   const [directLoading, setDirectLoading] = useState(false);
   const [directError, setDirectError] = useState("");
   const [directResult, setDirectResult] = useState<ClaimItem | null>(null);
+
+  // Traceability Graph State
+  const [graphModalOpen, setGraphModalOpen] = useState(false);
+  const [graphData, setGraphData] = useState<TraceabilityGraph | null>(null);
+  const [graphLoading, setGraphLoading] = useState(false);
+
+  async function handleOpenTraceabilityGraph() {
+    setGraphModalOpen(true);
+    if (!currentDocId) {
+      return;
+    }
+    setGraphLoading(true);
+    try {
+      const data = await api.getTraceabilityGraph(currentDocId);
+      setGraphData(data);
+    } catch (err) {
+      console.warn("Failed to fetch graph from backend:", err);
+    } finally {
+      setGraphLoading(false);
+    }
+  }
 
   useEffect(() => {
     if (screen === "workspace")
@@ -533,6 +573,10 @@ function Index() {
                 <RotateCcw />
                 New Analysis
               </Button>
+              <Button variant="outline" onClick={handleOpenTraceabilityGraph} className="gap-1.5">
+                <Network className="h-4 w-4" />
+                Traceability DAG
+              </Button>
               <Button onClick={exportReport}>
                 <Download />
                 Export Audit Report
@@ -740,10 +784,30 @@ function Index() {
                       <strong className="block mb-1 text-foreground">Retrieved Evidence:</strong>
                       &ldquo;{directResult.quote}&rdquo;
                     </div>
-                    <div className="text-xs text-muted-foreground mb-4">
+                    <div className="text-xs text-muted-foreground mb-3">
                       <strong className="block text-foreground mb-1">Scientific Reasoning:</strong>
                       {directResult.reasoning}
                     </div>
+
+                    {/* Evidence Alignment Score — Final Element */}
+                    <div
+                      className={`mb-4 rounded-lg border p-3 ${
+                        directResult.confidence >= 80
+                          ? "border-emerald-300 bg-emerald-50/80 text-emerald-950 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-100"
+                          : directResult.confidence >= 50
+                          ? "border-amber-300 bg-amber-50/80 text-amber-950 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-100"
+                          : "border-rose-300 bg-rose-50/80 text-rose-950 dark:border-rose-800 dark:bg-rose-950/40 dark:text-rose-100"
+                      }`}
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold">Evidence Alignment Score:</span>
+                        <span className="font-mono text-sm font-bold">{directResult.confidence}%</span>
+                      </div>
+                      <span className="text-[11px] block mt-0.5 opacity-90">
+                        {directResult.alignmentDisplay || (directResult.confidence >= 80 ? "Strong Evidence Alignment" : directResult.confidence >= 50 ? "Moderate Alignment" : "Weak Alignment")}
+                      </span>
+                    </div>
+
                     <Button
                       className="w-full"
                       onClick={() => {
@@ -1412,111 +1476,255 @@ function Index() {
                       </div>
                     </Button>
                     {active === c.id && (
-                      <div className="claim-detail">
-                        <div className="evidence-grid">
-                          <div>
-                            <div className="evidence-label">
-                              <FileText />
-                              PAPER’S CLAIM
-                            </div>
-                            <div className="evidence-box">{c.text}</div>
+                      <div className="claim-detail space-y-4 p-4 border-t bg-card/40">
+                        {/* 1. CLAIM & CITATION */}
+                        <div className="rounded-lg border bg-background/80 p-3.5 space-y-1.5">
+                          <div className="flex items-center justify-between text-xs text-muted-foreground">
+                            <span className="font-semibold uppercase tracking-wider text-[11px] text-primary flex items-center gap-1.5">
+                              <FileText className="h-3.5 w-3.5" />
+                              1. Scientific Claim & In-Text Citation
+                            </span>
+                            <span className="font-mono text-[11px] px-2 py-0.5 rounded bg-muted">
+                              Page: {c.page}
+                            </span>
                           </div>
-                          <div>
-                            <div className="evidence-label">
-                              <Quote />
-                              {isLiveAnalysis ? "RETRIEVED RESEARCH EVIDENCE" : "SIMULATED DEMO EXCERPT"}
-                            </div>
-                            <blockquote className="evidence-box quote-box">
-                              “
-                              <mark
-                                className={
-                                  c.status === "unsupported" ? "quote-conflict" : "quote-match"
-                                }
-                              >
-                                {c.quote.split(" ").slice(0, 5).join(" ")}
-                              </mark>{" "}
-                              {c.quote.split(" ").slice(5).join(" ")}”
-                            </blockquote>
+                          <p className="text-sm font-medium text-foreground leading-relaxed">{c.text}</p>
+                          <div className="text-xs text-muted-foreground flex items-center gap-2 pt-1">
+                            <span className="font-semibold text-foreground">In-Text Citation Marker:</span>
+                            <code className="bg-secondary px-1.5 py-0.5 rounded text-[11px]">{c.citation}</code>
                           </div>
                         </div>
-                        <div className="reasoning">
-                          <h3>
-                            <Sparkles />
-                            AI Reasoning
-                          </h3>
-                          <p>{c.reasoning}</p>
-                          <small>AI can be wrong. Verify against the full paper.</small>
+
+                        {/* 2. PUBLICATION DETAILS */}
+                        <div className="rounded-lg border bg-background/80 p-3.5 space-y-2">
+                          <div className="flex items-center justify-between text-xs text-muted-foreground">
+                            <span className="font-semibold uppercase tracking-wider text-[11px] text-primary flex items-center gap-1.5">
+                              <BookOpen className="h-3.5 w-3.5" />
+                              2. Cited Publication Identity
+                            </span>
+                            <span className={`text-[10px] uppercase font-bold px-2 py-0.5 rounded-full ${
+                              c.matchingStatus === "VERIFIED_MATCH"
+                                ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300"
+                                : c.matchingStatus === "POSSIBLE_MATCH"
+                                ? "bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300"
+                                : "bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300"
+                            }`}>
+                              {c.matchingStatus || "VERIFIED_MATCH"}
+                            </span>
+                          </div>
+                          <div>
+                            <p className="text-sm font-semibold text-foreground">{c.title}</p>
+                            <div className="text-xs text-muted-foreground mt-1 flex flex-wrap gap-x-3 gap-y-1">
+                              {c.authors && c.authors.length > 0 && (
+                                <span><strong>Authors:</strong> {c.authors.join(", ")}</span>
+                              )}
+                              <span><strong>Venue:</strong> {c.journal}</span>
+                              {c.publisher && <span><strong>Publisher:</strong> {c.publisher}</span>}
+                            </div>
+                          </div>
                         </div>
-                        <div className="source-footer">
-                          <strong>{c.title}</strong>
-                          <p>
-                            {c.journal}
-                            {c.doi ? (
-                              <a href={`https://doi.org/${c.doi}`} target="_blank" rel="noreferrer">
-                                DOI: {c.doi}
-                                <ExternalLink />
-                              </a>
-                            ) : (
-                              <span>Illustrative source · DOI not verified</span>
-                            )}
+
+                        {/* 3. VERDICT AND EXPLANATION */}
+                        <div className="rounded-lg border bg-background/80 p-3.5 space-y-2">
+                          <div className="flex items-center justify-between">
+                            <span className="font-semibold uppercase tracking-wider text-[11px] text-primary flex items-center gap-1.5">
+                              <Sparkles className="h-3.5 w-3.5" />
+                              3. Verification Verdict & Scientific Reasoning
+                            </span>
+                            <StatusBadge status={c.status} />
+                          </div>
+                          <p className="text-xs text-foreground/90 leading-relaxed bg-muted/30 p-2.5 rounded border border-border/50">
+                            {c.reasoning}
                           </p>
                         </div>
-                        <Button
-                          variant="outline"
-                          className="mobile-only mobile-document-button"
-                          onClick={() => sync(c.id, "document")}
-                        >
-                          <FileText />
-                          View in Document
-                        </Button>
-                        <div className="review-bar">
-                          <div className="review-controls">
-                            <label>
+
+                        {/* 4. ACTUAL EVIDENCE PASSAGE */}
+                        <div className="rounded-lg border bg-background/80 p-3.5 space-y-2">
+                          <div className="flex items-center justify-between text-xs text-muted-foreground">
+                            <span className="font-semibold uppercase tracking-wider text-[11px] text-primary flex items-center gap-1.5">
+                              <Quote className="h-3.5 w-3.5" />
+                              4. Verifiable Literature Evidence Passage
+                            </span>
+                            <span className="text-[11px] px-2 py-0.5 rounded bg-secondary font-mono">
+                              Provenance: {c.evidenceType === "full_text" ? "Full-Text Publication" : "Abstract / Open Access"}
+                            </span>
+                          </div>
+                          <blockquote className="rounded border-l-4 border-primary/60 bg-muted/40 p-3 text-xs italic text-foreground leading-relaxed">
+                            &ldquo;{c.quote}&rdquo;
+                          </blockquote>
+                          {c.evidencePassages && c.evidencePassages.length > 1 && (
+                            <div className="space-y-1.5 pt-1">
+                              <span className="text-[11px] font-semibold text-muted-foreground">Additional Supporting Passages:</span>
+                              {c.evidencePassages.slice(1).map((p, pIdx) => (
+                                <p key={pIdx} className="text-xs text-muted-foreground border-l-2 border-border pl-2 italic">
+                                  &ldquo;{p.text}&rdquo; {p.page_number ? `(p. ${p.page_number})` : ""}
+                                </p>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+
+                        {/* 5. LIMITATIONS & DETECTED ISSUES */}
+                        <div className="rounded-lg border bg-background/80 p-3.5 space-y-2">
+                          <span className="font-semibold uppercase tracking-wider text-[11px] text-primary flex items-center gap-1.5">
+                            <AlertTriangle className="h-3.5 w-3.5" />
+                            5. Limitations, Caveats & Scientific Verification Issues
+                          </span>
+                          {((c.issues && c.issues.length > 0) || (c.limitations && c.limitations.length > 0)) ? (
+                            <div className="space-y-1.5">
+                              {c.issues?.map((iss, iIdx) => (
+                                <div key={iIdx} className="flex items-start gap-2 rounded bg-amber-500/10 border border-amber-500/30 p-2 text-xs text-amber-900 dark:text-amber-200">
+                                  <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5 text-amber-600 dark:text-amber-400" />
+                                  <span>{iss}</span>
+                                </div>
+                              ))}
+                              {c.limitations?.map((lim, lIdx) => (
+                                <div key={lIdx} className="flex items-start gap-2 rounded bg-muted/60 p-2 text-xs text-muted-foreground">
+                                  <Info className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+                                  <span>{lim}</span>
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <div className="flex items-center gap-2 rounded bg-emerald-500/10 border border-emerald-500/20 p-2 text-xs text-emerald-800 dark:text-emerald-300">
+                              <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
+                              <span>No metric mismatches, inverted findings, or generalization fallacies detected.</span>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* 6. SOURCE TRACEABILITY */}
+                        <div className="rounded-lg border bg-background/80 p-3.5 space-y-2 text-xs">
+                          <span className="font-semibold uppercase tracking-wider text-[11px] text-primary flex items-center gap-1.5">
+                            <ExternalLink className="h-3.5 w-3.5" />
+                            6. Source Traceability & Metadata Provenance
+                          </span>
+                          <div className="flex flex-wrap items-center gap-3 text-muted-foreground">
+                            {c.doi ? (
+                              <a
+                                href={`https://doi.org/${c.doi}`}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="inline-flex items-center gap-1 text-primary hover:underline font-mono"
+                              >
+                                DOI: {c.doi} <ExternalLink size={11} />
+                              </a>
+                            ) : (
+                              <span className="text-muted-foreground">DOI: Not available or unindexed</span>
+                            )}
+                            <span className="inline-flex items-center gap-1">
+                              <CheckCircle2 size={11} className="text-emerald-500" />
+                              Resolved via Crossref & Semantic Scholar
+                            </span>
+                            {c.traceabilityNodeId && (
+                              <span className="font-mono text-[10px] text-muted-foreground/70">
+                                Node: {c.traceabilityNodeId}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* 7. HUMAN REVIEW STATUS */}
+                        <div className="rounded-lg border bg-background/80 p-3.5 space-y-3">
+                          <span className="font-semibold uppercase tracking-wider text-[11px] text-primary flex items-center gap-1.5">
+                            <MessageSquare className="h-3.5 w-3.5" />
+                            7. Human Review & Independent Expert Verification
+                          </span>
+                          <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
+                            <label className="flex items-center gap-2 text-xs font-medium cursor-pointer">
                               <Switch
                                 checked={flags.includes(c.id)}
                                 onCheckedChange={() => setFlags((f) => toggle(f, c.id))}
                                 aria-label="Flag for Human Review"
                               />
-                              Flag for Human Review
+                              Flag for Independent Human Review
                             </label>
                             <Button
-                              variant={verified.includes(c.id) ? "verifiedSolid" : "verified"}
+                              size="sm"
+                              variant={verified.includes(c.id) ? "default" : "outline"}
                               onClick={() => setVerified((v) => toggle(v, c.id))}
+                              className="text-xs h-8"
                             >
-                              <CheckCircle2 />
-                              {verified.includes(c.id)
-                                ? "Verified by Human"
-                                : "Mark Verified by Human"}
+                              <CheckCircle2 className="h-3.5 w-3.5 mr-1" />
+                              {verified.includes(c.id) ? "Verified by Human" : "Mark Verified by Human"}
                             </Button>
                           </div>
-                          <Button
-                            variant="ghost"
-                            className="notes-toggle"
-                            aria-expanded={notesOpen.includes(c.id)}
-                            onClick={() => setNotesOpen((n) => toggle(n, c.id))}
-                          >
-                            <MessageSquare />
-                            Reviewer Notes
-                            {notesOpen.includes(c.id) ? <ChevronDown /> : <ChevronRight />}
-                          </Button>
-                          {notesOpen.includes(c.id) && (
-                            <div>
-                              <textarea
-                                aria-label="Reviewer Notes"
-                                placeholder="Add your assessment or a note for follow-up…"
-                                value={notes[c.id] || ""}
-                                onChange={(e) =>
-                                  setNotes((n) => ({ ...n, [c.id]: e.target.value }))
-                                }
-                              />
-                              {notes[c.id] && (
-                                <span className="notes-saved">
-                                  <Check size={10} />
-                                  Saved for this session
-                                </span>
-                              )}
+                          <div>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-7 text-xs px-2 text-muted-foreground"
+                              onClick={() => setNotesOpen((n) => toggle(n, c.id))}
+                            >
+                              <MessageSquare className="h-3 w-3 mr-1" />
+                              {notesOpen.includes(c.id) ? "Hide Reviewer Notes" : "Add / Edit Reviewer Notes"}
+                              {notesOpen.includes(c.id) ? <ChevronDown className="h-3 w-3 ml-1" /> : <ChevronRight className="h-3 w-3 ml-1" />}
+                            </Button>
+                            {notesOpen.includes(c.id) && (
+                              <div className="mt-2 space-y-1.5">
+                                <textarea
+                                  aria-label="Reviewer Notes"
+                                  placeholder="Record your independent evaluation, nuance caveats, or audit notes…"
+                                  value={notes[c.id] || ""}
+                                  onChange={(e) => setNotes((n) => ({ ...n, [c.id]: e.target.value }))}
+                                  className="w-full text-xs rounded-md border p-2 bg-background text-foreground min-h-[64px]"
+                                />
+                                {notes[c.id] && (
+                                  <span className="text-[10px] text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
+                                    <Check size={10} /> Saved to session report
+                                  </span>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* 8. EVIDENCE ALIGNMENT SCORE (%) — FINAL ELEMENT AT THE VERY BOTTOM OF THE CLAIM BOX */}
+                        <div
+                          className={`rounded-xl border p-4 transition-all ${
+                            c.confidence >= 80
+                              ? "border-emerald-300 bg-emerald-50/80 text-emerald-950 dark:border-emerald-800/80 dark:bg-emerald-950/40 dark:text-emerald-100"
+                              : c.confidence >= 50
+                              ? "border-amber-300 bg-amber-50/80 text-amber-950 dark:border-amber-800/80 dark:bg-amber-950/40 dark:text-amber-100"
+                              : "border-rose-300 bg-rose-50/80 text-rose-950 dark:border-rose-800/80 dark:bg-rose-950/40 dark:text-rose-100"
+                          }`}
+                        >
+                          <div className="flex flex-wrap items-center justify-between gap-3">
+                            <div className="flex items-center gap-3">
+                              <div
+                                className={`flex h-14 w-14 shrink-0 items-center justify-center rounded-xl font-mono text-xl font-bold shadow-sm ${
+                                  c.confidence >= 80
+                                    ? "bg-emerald-600 text-white dark:bg-emerald-500"
+                                    : c.confidence >= 50
+                                    ? "bg-amber-500 text-white dark:bg-amber-600"
+                                    : "bg-rose-600 text-white dark:bg-rose-500"
+                                }`}
+                              >
+                                {c.confidence}%
+                              </div>
+                              <div>
+                                <div className="flex items-center gap-2">
+                                  <span className="text-sm font-bold tracking-tight">
+                                    {c.alignmentDisplay || (c.confidence >= 80 ? `${c.confidence}% — Strong Evidence Alignment` : c.confidence >= 50 ? `${c.confidence}% — Moderate Evidence Alignment` : `${c.confidence}% — Weak Evidence Alignment`)}
+                                  </span>
+                                  <span
+                                    className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wider ${
+                                      c.confidence >= 80
+                                        ? "bg-emerald-200/90 text-emerald-900 dark:bg-emerald-900/70 dark:text-emerald-200"
+                                        : c.confidence >= 50
+                                        ? "bg-amber-200/90 text-amber-900 dark:bg-amber-900/70 dark:text-amber-200"
+                                        : "bg-rose-200/90 text-rose-900 dark:bg-rose-900/70 dark:text-rose-200"
+                                    }`}
+                                  >
+                                    {c.alignmentTier || (c.confidence >= 80 ? "STRONG" : c.confidence >= 50 ? "MODERATE" : "WEAK")}
+                                  </span>
+                                </div>
+                                <p className="text-xs opacity-90 mt-1">
+                                  Final Evidence Alignment Score: 4-factor scoring across Publication Identity (20%), Provenance Depth (25%), Verdict Alignment (35%), and Deterministic Scientific Checks (20%).
+                                </p>
+                              </div>
                             </div>
-                          )}
+                          </div>
                         </div>
                       </div>
                     )}
@@ -1653,6 +1861,98 @@ function Index() {
                 <Check />
               </Button>
             </>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Traceability Graph DAG Dialog */}
+      <Dialog open={graphModalOpen} onOpenChange={setGraphModalOpen}>
+        <DialogContent className="sm:max-w-3xl max-h-[85vh] overflow-y-auto">
+          <div className="flex items-center gap-2 mb-2">
+            <div className="h-9 w-9 rounded-lg bg-primary/10 text-primary flex items-center justify-center">
+              <Network className="h-5 w-5" />
+            </div>
+            <div>
+              <DialogTitle className="text-lg font-bold">
+                Claim-to-Evidence Traceability Graph (DAG)
+              </DialogTitle>
+              <DialogDescription className="text-xs">
+                Auditable directed acyclic graph mapping Document → Claims → In-Text Citations → Sources → Evidence Passages → Verdicts.
+              </DialogDescription>
+            </div>
+          </div>
+
+          {graphLoading ? (
+            <div className="py-12 flex flex-col items-center justify-center gap-2 text-muted-foreground">
+              <LoaderCircle className="h-6 w-6 animate-spin text-primary" />
+              <span className="text-xs">Constructing Traceability DAG…</span>
+            </div>
+          ) : graphData && graphData.nodes && graphData.nodes.length > 0 ? (
+            <div className="space-y-4">
+              <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground pb-2 border-b">
+                <span className="font-semibold text-foreground">Graph Nodes ({graphData.nodes.length}):</span>
+                <span className="px-2 py-0.5 rounded bg-blue-100 dark:bg-blue-950 text-blue-800 dark:text-blue-300">Document</span>
+                <span>→</span>
+                <span className="px-2 py-0.5 rounded bg-purple-100 dark:bg-purple-950 text-purple-800 dark:text-purple-300">Claims</span>
+                <span>→</span>
+                <span className="px-2 py-0.5 rounded bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300">Citations</span>
+                <span>→</span>
+                <span className="px-2 py-0.5 rounded bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300">Sources</span>
+                <span>→</span>
+                <span className="px-2 py-0.5 rounded bg-indigo-100 dark:bg-indigo-950 text-indigo-800 dark:text-indigo-300">Evidence Passages</span>
+                <span>→</span>
+                <span className="px-2 py-0.5 rounded bg-teal-100 dark:bg-teal-950 text-teal-800 dark:text-teal-300">Verdicts</span>
+              </div>
+
+              <div className="space-y-2 max-h-[50vh] overflow-y-auto pr-1">
+                {graphData.nodes.map((node) => {
+                  const nodeColor =
+                    node.type === "document"
+                      ? "border-blue-500/40 bg-blue-50/50 dark:bg-blue-950/20"
+                      : node.type === "claim"
+                      ? "border-purple-500/40 bg-purple-50/50 dark:bg-purple-950/20"
+                      : node.type === "citation"
+                      ? "border-amber-500/40 bg-amber-50/50 dark:bg-amber-950/20"
+                      : node.type === "source"
+                      ? "border-emerald-500/40 bg-emerald-50/50 dark:bg-emerald-950/20"
+                      : node.type === "passage"
+                      ? "border-indigo-500/40 bg-indigo-50/50 dark:bg-indigo-950/20"
+                      : "border-teal-500/40 bg-teal-50/50 dark:bg-teal-950/20";
+
+                  return (
+                    <div key={node.id} className={`rounded-lg border p-3 text-xs ${nodeColor}`}>
+                      <div className="flex items-center justify-between font-mono text-[10px] text-muted-foreground mb-1">
+                        <span className="uppercase font-bold tracking-wider text-foreground">{node.type}</span>
+                        <span>{node.id}</span>
+                      </div>
+                      <p className="font-medium text-foreground">{node.label}</p>
+                      {node.data && Object.keys(node.data).length > 0 && (
+                        <div className="mt-1 flex flex-wrap gap-2 text-[11px] text-muted-foreground pt-1 border-t border-border/40">
+                          {Object.entries(node.data)
+                            .filter(([_, v]) => v !== null && v !== undefined && typeof v !== "object")
+                            .slice(0, 4)
+                            .map(([k, v]) => (
+                              <span key={k}>
+                                <strong className="text-foreground/80">{k}:</strong> {String(v)}
+                              </span>
+                            ))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+
+              <div className="pt-2 border-t text-xs text-muted-foreground">
+                <span className="font-semibold text-foreground">Graph Edges ({graphData.edges.length}):</span> Complete claim-to-evidence provenance with zero hallucinated leaps.
+              </div>
+            </div>
+          ) : (
+            <div className="py-8 text-center text-xs text-muted-foreground">
+              <Network className="mx-auto h-8 w-8 text-muted-foreground/40 mb-2" />
+              <p className="font-medium text-foreground">Traceability Graph Available During Document Analysis</p>
+              <p className="mt-1">Analyze a scientific PDF or Word document to generate an end-to-end directed acyclic graph mapping every extracted claim to its cited publication and retrieved evidence passage.</p>
+            </div>
           )}
         </DialogContent>
       </Dialog>

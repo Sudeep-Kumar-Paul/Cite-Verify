@@ -25,6 +25,7 @@ VERDICT_COLORS = {
     "CONTRADICTORY": (0.6, 0.0, 0.6),
     "NEEDS_HUMAN_REVIEW": (0.35, 0.35, 0.35),
     "POSSIBLY_OUTDATED": (0.5, 0.3, 0.0),
+    "POTENTIALLY_OUTDATED": (0.5, 0.3, 0.0),
 }
 
 
@@ -49,6 +50,7 @@ class ReportService:
             "CONTRADICTORY": 0,
             "NEEDS_HUMAN_REVIEW": 0,
             "POSSIBLY_OUTDATED": 0,
+            "POTENTIALLY_OUTDATED": 0,
         }
         claim_summaries = []
 

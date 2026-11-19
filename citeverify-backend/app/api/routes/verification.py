@@ -27,7 +27,9 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
-def _build_response(document_id: str, results_dicts: list[dict]) -> VerificationResponse:
+def _build_response(
+    document_id: str, results_dicts: list[dict], graph_data: dict | None = None
+) -> VerificationResponse:
     counts = {
         "supported": 0,
         "partially_supported": 0,
@@ -48,7 +50,16 @@ def _build_response(document_id: str, results_dicts: list[dict]) -> Verification
             source_info = SourceInfo(**rd["source"])
 
         evidence_passages = [EvidencePassage(**p) for p in rd.get("evidence_passages", [])]
-        confidence = ConfidenceInfo(**rd["confidence"])
+        conf_data = rd.get("confidence", {})
+        confidence = ConfidenceInfo(
+            level=conf_data.get("level", "LOW"),
+            score=conf_data.get("score", 0.0),
+            reason=conf_data.get("reason", ""),
+            alignment_score=rd.get("alignment_score"),
+            alignment_tier=rd.get("alignment_tier"),
+            alignment_display=rd.get("alignment_display"),
+            is_scoreable=rd.get("is_scoreable", True),
+        )
 
         result_objects.append(
             VerificationResult(
@@ -62,6 +73,11 @@ def _build_response(document_id: str, results_dicts: list[dict]) -> Verification
                 confidence=confidence,
                 issues=rd.get("issues", []),
                 human_review_required=rd.get("human_review_required", False),
+                alignment_score=rd.get("alignment_score"),
+                alignment_tier=rd.get("alignment_tier"),
+                alignment_display=rd.get("alignment_display"),
+                is_scoreable=rd.get("is_scoreable", True),
+                traceability_node_id=rd.get("traceability_node_id"),
             )
         )
 
@@ -69,6 +85,7 @@ def _build_response(document_id: str, results_dicts: list[dict]) -> Verification
         document_id=document_id,
         results=result_objects,
         total_claims=len(result_objects),
+        traceability_graph=graph_data,
         **counts,
         message=f"Verification complete: {len(result_objects)} claims verified.",
     )
@@ -95,7 +112,16 @@ async def verify_claim_endpoint(
         if result_dict.get("source"):
             source_info = SourceInfo(**result_dict["source"])
         evidence_passages = [EvidencePassage(**p) for p in result_dict.get("evidence_passages", [])]
-        confidence = ConfidenceInfo(**result_dict["confidence"])
+        conf_data = result_dict.get("confidence", {})
+        confidence = ConfidenceInfo(
+            level=conf_data.get("level", "LOW"),
+            score=conf_data.get("score", 0.0),
+            reason=conf_data.get("reason", ""),
+            alignment_score=result_dict.get("alignment_score"),
+            alignment_tier=result_dict.get("alignment_tier"),
+            alignment_display=result_dict.get("alignment_display"),
+            is_scoreable=result_dict.get("is_scoreable", True),
+        )
 
         return VerificationResult(
             claim_id=result_dict["claim_id"],
@@ -108,6 +134,11 @@ async def verify_claim_endpoint(
             confidence=confidence,
             issues=result_dict.get("issues", []),
             human_review_required=result_dict.get("human_review_required", False),
+            alignment_score=result_dict.get("alignment_score"),
+            alignment_tier=result_dict.get("alignment_tier"),
+            alignment_display=result_dict.get("alignment_display"),
+            is_scoreable=result_dict.get("is_scoreable", True),
+            traceability_node_id=result_dict.get("traceability_node_id"),
         )
     except Exception as e:
         logger.error(f"Direct verification error: {e}", exc_info=True)
@@ -134,7 +165,8 @@ async def run_verification(request: VerificationRequest, db: Session = Depends(g
         for v in verifications:
             results_dicts.append(service.build_result_dict(v, v.claim, v.source))
 
-        return _build_response(request.document_id, results_dicts)
+        graph_data = service.build_traceability_graph(db, request.document_id)
+        return _build_response(request.document_id, results_dicts, graph_data=graph_data)
 
     except ExternalAPIException as e:
         raise HTTPException(status_code=503, detail=str(e))
@@ -153,7 +185,22 @@ async def get_verification_results(document_id: str, db: Session = Depends(get_d
         service = VerificationService(gemini_service, paper_search, crossref, evidence)
 
         results_dicts = service.get_verification_results(db, document_id)
-        return _build_response(document_id, results_dicts)
+        graph_data = service.build_traceability_graph(db, document_id)
+        return _build_response(document_id, results_dicts, graph_data=graph_data)
     except Exception as e:
         logger.error(f"Get verification results failure: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/documents/{document_id}/graph")
+async def get_traceability_graph(document_id: str, db: Session = Depends(get_db)):
+    """
+    Returns the Claim-to-Evidence Traceability Graph (DAG) for academic audit and hackathon inspection.
+    """
+    try:
+        service = VerificationService()
+        graph = service.build_traceability_graph(db, document_id)
+        return graph
+    except Exception as e:
+        logger.error(f"Failed to generate traceability graph: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))

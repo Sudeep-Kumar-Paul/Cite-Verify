@@ -53,7 +53,15 @@ if (isFirebaseConfigured) {
  * Format common Firebase authentication error codes into clear, actionable messages
  */
 export function getFirebaseErrorMessage(errorCode: string, rawMessage?: string): string {
-  switch (errorCode) {
+  let code = errorCode || "";
+  if ((!code || code === "undefined") && rawMessage) {
+    const match = rawMessage.match(/\((auth\/[^)]+)\)/);
+    if (match) {
+      code = match[1];
+    }
+  }
+
+  switch (code) {
     case "auth/unauthorized-domain":
       return "This domain (127.0.0.1) is not authorized in Firebase. Open http://localhost:5173 in your browser, or add 127.0.0.1 to Firebase Console → Authentication → Settings → Authorized domains.";
     case "auth/operation-not-allowed":

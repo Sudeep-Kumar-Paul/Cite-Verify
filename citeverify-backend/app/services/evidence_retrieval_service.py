@@ -132,7 +132,7 @@ class EvidenceRetrievalService:
             return {"full_text": "", "pages": [], "page_count": 0}
 
     def find_relevant_passages(
-        self, source_text: str, claim_text: str, window_size: int = 500
+        self, source_text: str, claim_text: str, window_size: int = 500, pages: Optional[list[dict]] = None
     ) -> list[dict]:
         if not source_text or not claim_text:
             return []
@@ -146,27 +146,55 @@ class EvidenceRetrievalService:
         }
         claim_keywords = claim_words - stopwords
 
-        words = source_text.split()
-        window_words = max(20, window_size // 5)
-        step = max(1, window_words // 2)
-
         scored_passages = []
-        for i in range(0, max(1, len(words) - window_words), step):
-            window = words[i:i + window_words]
-            window_text = " ".join(window)
-            window_lower = window_text.lower()
-            keyword_hits = sum(1 for kw in claim_keywords if kw in window_lower)
-            if keyword_hits == 0:
-                continue
-            score = keyword_hits / max(len(claim_keywords), 1)
-            scored_passages.append({
-                "text": window_text,
-                "page_number": None,
-                "relevance_score": score,
-            })
+
+        # If individual pages are available, search with true page provenance
+        if pages and len(pages) > 0:
+            for page in pages:
+                p_text = page.get("text", "")
+                p_num = page.get("page_num")
+                words = p_text.split()
+                window_words = max(20, window_size // 5)
+                step = max(1, window_words // 2)
+
+                for i in range(0, max(1, len(words) - window_words + 1), step):
+                    window = words[i:i + window_words]
+                    window_text = " ".join(window)
+                    window_lower = window_text.lower()
+                    keyword_hits = sum(1 for kw in claim_keywords if kw in window_lower)
+                    if keyword_hits == 0:
+                        continue
+                    score = keyword_hits / max(len(claim_keywords), 1)
+                    scored_passages.append({
+                        "text": window_text,
+                        "page_number": p_num,
+                        "relevance_score": score,
+                    })
+        else:
+            words = source_text.split()
+            window_words = max(20, window_size // 5)
+            step = max(1, window_words // 2)
+
+            for i in range(0, max(1, len(words) - window_words + 1), step):
+                window = words[i:i + window_words]
+                window_text = " ".join(window)
+                window_lower = window_text.lower()
+                keyword_hits = sum(1 for kw in claim_keywords if kw in window_lower)
+                if keyword_hits == 0:
+                    continue
+                score = keyword_hits / max(len(claim_keywords), 1)
+                scored_passages.append({
+                    "text": window_text,
+                    "page_number": None,
+                    "relevance_score": score,
+                })
 
         scored_passages.sort(key=lambda x: x["relevance_score"], reverse=True)
-        return scored_passages[:5]
+        top = scored_passages[:5]
+        # Assign indexed IDs for strict anti-hallucination verification
+        for idx, p in enumerate(top, 1):
+            p["id"] = f"P{idx}"
+        return top
 
     async def retrieve_source_evidence(
         self, db: Session, citation: Citation, paper_data: dict, downloads_dir: str

@@ -13,10 +13,10 @@ describe("PDF upload constraints", () => {
 });
 describe("demo triage", () => {
   it("contains nine claims", () => expect(claims).toHaveLength(9));
-  it("contains four supported claims", () =>
-    expect(claims.filter((c) => c.status === "supported")).toHaveLength(4));
-  it("contains two partially supported claims", () =>
-    expect(claims.filter((c) => c.status === "partial")).toHaveLength(2));
+  it("contains three supported claims", () =>
+    expect(claims.filter((c) => c.status === "supported")).toHaveLength(3));
+  it("contains three partially supported claims (including Gulshan et al metric mismatch)", () =>
+    expect(claims.filter((c) => c.status === "partial")).toHaveLength(3));
   it("contains two unsupported claims", () =>
     expect(claims.filter((c) => c.status === "unsupported")).toHaveLength(2));
   it("contains one outdated claim", () =>

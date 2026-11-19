@@ -7,6 +7,7 @@ from typing import Any, Optional
 from tenacity import retry, stop_after_attempt, wait_exponential
 
 from app.config import get_settings
+from app.utils.scientific_checks import ScientificChecker
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
@@ -57,20 +58,21 @@ CRITICAL AI SAFEGUARDS — STRICT ADHERENCE REQUIRED:
 9. If evidence is abstract-only, explicitly state this limitation.
 
 Allowed verdicts:
-- SUPPORTED: Evidence directly and fully supports the claim.
-- PARTIALLY_SUPPORTED: Evidence supports part of the claim or adds major caveats/limitations.
-- UNSUPPORTED: Evidence discusses the topic but does not establish or support the claim.
-- CONTRADICTORY: Evidence directly conflicts with or disproves the claim.
+- SUPPORTED: Evidence directly and fully supports all material aspects of the claim.
+- PARTIALLY_SUPPORTED: Evidence supports part of the claim or introduces major caveats, limitations, or metric nuances.
+- UNSUPPORTED: Evidence discusses the topic or methods but does NOT substantiate or demonstrate the claim.
+- CONTRADICTORY: Evidence directly conflicts with, inverts, or disproves the claim (e.g. increase vs decrease).
+- POTENTIALLY_OUTDATED: Claim was supported by older findings, but newer scientific consensus or subsequent research indicates it is outdated.
 - NEEDS_HUMAN_REVIEW: Retrieved evidence is insufficient, ambiguous, or unavailable to make an automated determination.
-- POSSIBLY_OUTDATED: Claim was supported by older findings but subsequent consensus or context indicates it may be outdated.
 
 Return valid JSON with this exact schema:
 {
-  "verdict": "SUPPORTED|PARTIALLY_SUPPORTED|UNSUPPORTED|CONTRADICTORY|NEEDS_HUMAN_REVIEW|POSSIBLY_OUTDATED",
-  "explanation": "Detailed evidence-based explanation referencing specific source points",
-  "issues": ["List of specific issues or limitations identified"],
-  "human_review_required": true,
-  "relevant_passages": ["Direct quotes or excerpted passages from the provided evidence that relate to the claim"]
+  "verdict": "SUPPORTED|PARTIALLY_SUPPORTED|UNSUPPORTED|CONTRADICTORY|POTENTIALLY_OUTDATED|NEEDS_HUMAN_REVIEW",
+  "explanation": "Detailed evidence-based explanation referencing specific source points and numerical checks",
+  "issues": ["List of specific issues, limitations, or caveats identified"],
+  "human_review_required": false,
+  "used_passage_ids": ["P1", "P2"],
+  "relevant_passages": ["Direct authentic excerpt from provided evidence"]
 }
 
 Output ONLY valid JSON without Markdown fences or commentary.
@@ -167,16 +169,33 @@ class GeminiService:
     async def verify_claim(
         self,
         claim_text: str,
-        evidence_passages: list[str],
+        evidence_passages: Any,
         source_title: str,
         source_abstract: str,
         evidence_type: str,
     ) -> dict:
         evidence_context = ""
+        indexed_passages = {}
+        full_evidence_corpus = source_abstract or ""
+
         if evidence_passages:
             evidence_context += "RETRIEVED SOURCE PASSAGES:\n"
-            for i, passage in enumerate(evidence_passages, 1):
-                evidence_context += f"[Passage {i}]: {passage}\n\n"
+            for i, p in enumerate(evidence_passages, 1):
+                if isinstance(p, dict):
+                    pid = p.get("id", f"P{i}")
+                    ptext = p.get("text", "")
+                    pnum = p.get("page_number")
+                    page_str = f"Page: {pnum}" if pnum else "Page: Unavailable"
+                    indexed_passages[pid] = p
+                    evidence_context += f"[{pid}] ({page_str}): {ptext}\n\n"
+                    full_evidence_corpus += " " + ptext
+                else:
+                    pid = f"P{i}"
+                    ptext = str(p)
+                    indexed_passages[pid] = {"id": pid, "text": ptext, "page_number": None}
+                    evidence_context += f"[{pid}]: {ptext}\n\n"
+                    full_evidence_corpus += " " + ptext
+
         if source_abstract:
             evidence_context += f"SOURCE ABSTRACT:\n{source_abstract}\n\n"
 
@@ -189,12 +208,16 @@ class GeminiService:
                 "relevant_passages": [],
             }
 
+        # Deterministic scientific pre-checks
+        sci_checks = ScientificChecker.run_all_checks(claim_text, full_evidence_corpus)
+
         user_message = (
             f"CLAIM TO VERIFY:\n{claim_text}\n\n"
             f"SOURCE PAPER TITLE: {source_title or 'Unknown'}\n"
             f"EVIDENCE TYPE: {evidence_type}\n\n"
             f"{evidence_context}\n"
-            f"Assess whether the evidence above supports, partially supports, contradicts, or fails to support the claim."
+            f"Assess whether the evidence above supports, partially supports, contradicts, or fails to support the claim.\n"
+            f"Reference the specific passage IDs (e.g. ['P1']) you based your assessment on."
         )
 
         try:
@@ -217,12 +240,57 @@ class GeminiService:
 
             valid_verdicts = {
                 "SUPPORTED", "PARTIALLY_SUPPORTED", "UNSUPPORTED",
-                "CONTRADICTORY", "NEEDS_HUMAN_REVIEW", "POSSIBLY_OUTDATED",
+                "CONTRADICTORY", "POTENTIALLY_OUTDATED", "POSSIBLY_OUTDATED", "NEEDS_HUMAN_REVIEW",
             }
-            if parsed.get("verdict") not in valid_verdicts:
-                parsed["verdict"] = "NEEDS_HUMAN_REVIEW"
+            raw_v = (parsed.get("verdict") or "NEEDS_HUMAN_REVIEW").upper()
+            if raw_v not in valid_verdicts:
+                raw_v = "NEEDS_HUMAN_REVIEW"
                 parsed.setdefault("issues", []).append("AI returned unrecognized verdict code; defaulted to NEEDS_HUMAN_REVIEW.")
+
+            # Standardize POSSIBLY_OUTDATED to POTENTIALLY_OUTDATED while preserving legacy equivalence
+            if raw_v == "POSSIBLY_OUTDATED":
+                raw_v = "POTENTIALLY_OUTDATED"
+
+            # Apply Deterministic Scientific Safeguards
+            issues = parsed.get("issues", [])
+            for sci_issue in sci_checks["issues"]:
+                if sci_issue not in issues:
+                    issues.append(sci_issue)
+
+            if sci_checks["direction_inverted"]:
+                raw_v = "CONTRADICTORY"
+                parsed["human_review_required"] = False
+            elif sci_checks["metric_mismatch"] and raw_v == "SUPPORTED":
+                raw_v = "PARTIALLY_SUPPORTED"
+            elif sci_checks["causation_fallacy"] and raw_v == "SUPPORTED":
+                raw_v = "PARTIALLY_SUPPORTED"
+            elif sci_checks["animal_to_human_flaw"] and raw_v == "SUPPORTED":
+                raw_v = "PARTIALLY_SUPPORTED"
+
+            parsed["verdict"] = raw_v
+            parsed["issues"] = issues
+            parsed["scientific_checks"] = sci_checks
+
+            # Resolve authentic passages using passage IDs (anti-hallucination)
+            used_ids = parsed.get("used_passage_ids", [])
+            verified_passages = []
+            for pid in used_ids:
+                if pid in indexed_passages:
+                    verified_passages.append(indexed_passages[pid]["text"])
+
+            # If Gemini output quotations in relevant_passages, strictly verify they exist in source text
+            for raw_quote in parsed.get("relevant_passages", []):
+                if raw_quote and raw_quote in full_evidence_corpus and raw_quote not in verified_passages:
+                    verified_passages.append(raw_quote)
+
+            # Fallback to top indexed passage if none resolved
+            if not verified_passages and indexed_passages:
+                first_key = next(iter(indexed_passages))
+                verified_passages.append(indexed_passages[first_key]["text"])
+
+            parsed["relevant_passages"] = verified_passages
             return parsed
+
         except json.JSONDecodeError as e:
             logger.warning(f"Gemini returned non-JSON verification response: {e}")
             return {
@@ -231,6 +299,7 @@ class GeminiService:
                 "issues": ["Malformed AI verification output"],
                 "human_review_required": True,
                 "relevant_passages": [],
+                "scientific_checks": sci_checks,
             }
         except Exception as e:
             logger.error(f"Gemini verification call failed: {e}")

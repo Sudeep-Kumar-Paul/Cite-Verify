@@ -16,6 +16,10 @@ class ConfidenceInfo(BaseModel):
     level: str  # HIGH, MEDIUM, LOW
     score: float
     reason: str
+    alignment_score: Optional[int] = None
+    alignment_tier: Optional[str] = None
+    alignment_display: Optional[str] = None
+    is_scoreable: bool = True
 
 
 class SourceInfo(BaseModel):
@@ -28,6 +32,7 @@ class SourceInfo(BaseModel):
     journal: Optional[str] = None
     publisher: Optional[str] = None
     doi_url: Optional[str] = None
+    matching_status: Optional[str] = "VERIFIED_MATCH"
 
 
 class DirectClaimVerificationRequest(BaseModel):
@@ -48,6 +53,11 @@ class VerificationResult(BaseModel):
     confidence: ConfidenceInfo
     issues: List[str] = []
     human_review_required: bool = False
+    alignment_score: Optional[int] = None
+    alignment_tier: Optional[str] = None
+    alignment_display: Optional[str] = None
+    is_scoreable: bool = True
+    traceability_node_id: Optional[str] = None
 
 
 class VerificationRequest(BaseModel):
@@ -66,4 +76,5 @@ class VerificationResponse(BaseModel):
     contradictory: int = 0
     needs_human_review: int = 0
     possibly_outdated: int = 0
+    traceability_graph: Optional[Dict[str, Any]] = None
     message: str

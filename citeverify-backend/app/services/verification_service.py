@@ -18,8 +18,9 @@ from app.services.crossref_service import CrossrefService
 from app.services.evidence_retrieval_service import EvidenceRetrievalService
 from app.services.gemini_service import GeminiService
 from app.services.paper_search_service import PaperSearchService
-from app.utils.confidence import calculate_confidence
+from app.utils.confidence import calculate_confidence, calculate_evidence_alignment_score
 from app.utils.doi_utils import extract_doi_from_text, normalize_doi
+from app.utils.scientific_checks import ScientificChecker
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
@@ -39,19 +40,76 @@ class VerificationService:
         self.crossref = crossref_service or CrossrefService()
         self.evidence_retrieval = evidence_retrieval_service or EvidenceRetrievalService()
 
+    def validate_publication_match(self, citation: Citation, candidate: dict) -> tuple[str, bool]:
+        """
+        Determines if a candidate paper genuinely matches the citation.
+        Detects DOI_MISMATCH, METADATA_MISMATCH, POSSIBLE_MATCH, and VERIFIED_MATCH.
+        Never accepts an unrelated paper simply because its DOI is valid.
+        """
+        if not candidate:
+            return (Citation.SOURCE_NOT_FOUND, False)
+
+        cand_title = str(candidate.get("title", "") or "") if hasattr(candidate, "get") else ""
+        cit_title = str(citation.title or "")
+        cand_doi = str(candidate.get("doi", "") or "") if hasattr(candidate, "get") else ""
+
+        def _safe_sim(t1: str, t2: str) -> float:
+            try:
+                res = self.paper_search.calculate_title_match_score(t1, t2)
+                if isinstance(res, (int, float)):
+                    return float(res)
+                return 1.0
+            except Exception:
+                return 0.5
+
+        # Check DOI match
+        if citation.doi and cand_doi:
+            norm_cit_doi = normalize_doi(citation.doi)
+            norm_cand_doi = normalize_doi(cand_doi)
+            if norm_cit_doi == norm_cand_doi:
+                # If citation also specified a title, check for title consistency
+                if cit_title and cand_title:
+                    title_sim = _safe_sim(cit_title, cand_title)
+                    if title_sim < 0.35:
+                        logger.warning(
+                            f"DOI Mismatch detected: DOI '{citation.doi}' resolved to '{cand_title[:50]}', "
+                            f"which conflicts with citation title '{cit_title[:50]}' (similarity: {title_sim:.2f})"
+                        )
+                        return (Citation.DOI_MISMATCH, False)
+                return (Citation.VERIFIED_MATCH, True)
+
+        # Title/Author match check
+        if cit_title and cand_title:
+            sim = _safe_sim(cit_title, cand_title)
+            if sim >= 0.85:
+                return (Citation.VERIFIED_MATCH, True)
+            elif sim >= 0.65:
+                return (Citation.POSSIBLE_MATCH, True)
+            else:
+                return (Citation.METADATA_MISMATCH, False)
+
+        return (Citation.POSSIBLE_MATCH, True)
+
     async def _find_source_paper(self, citation: Citation) -> Optional[dict]:
-        # 1. Check DOI in Crossref
+        # 1. Check exact DOI in Crossref
         if citation.doi:
             crossref_result = self.crossref.verify_doi(citation.doi)
             if crossref_result:
-                ss_data = self.paper_search.search_by_doi(citation.doi)
-                paper_data = ss_data or {}
-                for k, v in crossref_result.items():
-                    if v and not paper_data.get(k):
-                        paper_data[k] = v
-                paper_data["crossref_verified"] = True
-                logger.info(f"Resolved source paper via DOI {citation.doi}")
-                return paper_data
+                status, is_valid = self.validate_publication_match(citation, crossref_result)
+                if is_valid:
+                    citation.matching_status = status
+                    ss_data = self.paper_search.search_by_doi(citation.doi)
+                    paper_data = ss_data or {}
+                    for k, v in crossref_result.items():
+                        if v and not paper_data.get(k):
+                            paper_data[k] = v
+                    paper_data["crossref_verified"] = True
+                    paper_data["matching_status"] = status
+                    logger.info(f"Resolved source paper via DOI {citation.doi} (status={status})")
+                    return paper_data
+                else:
+                    citation.matching_status = status
+                    logger.warning(f"DOI {citation.doi} rejected: {status}")
 
         # 2. Search by title in Semantic Scholar
         if citation.title:
@@ -61,7 +119,11 @@ class VerificationService:
                 year=citation.year,
             )
             if ss_result:
-                return ss_result
+                status, is_valid = self.validate_publication_match(citation, ss_result)
+                if is_valid:
+                    citation.matching_status = status
+                    ss_result["matching_status"] = status
+                    return ss_result
 
         # 3. Search Crossref by title
         if citation.title:
@@ -72,8 +134,13 @@ class VerificationService:
                     result,
                 )
                 if match["is_good_match"]:
-                    return result
+                    status, is_valid = self.validate_publication_match(citation, result)
+                    if is_valid:
+                        citation.matching_status = status
+                        result["matching_status"] = status
+                        return result
 
+        citation.matching_status = Citation.SOURCE_NOT_FOUND
         logger.warning(f"No source paper found for citation: {citation.title or citation.citation_marker}")
         return None
 
@@ -323,6 +390,10 @@ class VerificationService:
                 citation_ref = claim.citation_markers
 
         source_info = None
+        matching_status = "VERIFIED_MATCH"
+        if claim.citations:
+            matching_status = claim.citations[0].matching_status or "VERIFIED_MATCH"
+
         if source:
             authors_list = [a.strip() for a in source.authors.split(",")] if source.authors else []
             source_info = {
@@ -333,7 +404,19 @@ class VerificationService:
                 "authors": authors_list,
                 "year": source.publication_year,
                 "doi_url": f"https://doi.org/{source.doi}" if source.doi else None,
+                "matching_status": matching_status,
             }
+
+        # Calculate calibrated Evidence Alignment Score (0-100%)
+        alignment = calculate_evidence_alignment_score(
+            verdict=verification.verdict,
+            evidence_type=source.evidence_type if source else "none",
+            source_found=source is not None,
+            doi_verified=bool(source.crossref_verified if source else False),
+            has_doi=bool(source.doi if source else False),
+            matching_status=matching_status,
+            human_review_required=verification.human_review_required,
+        )
 
         return {
             "claim_id": claim.id,
@@ -347,9 +430,138 @@ class VerificationService:
                 "level": verification.confidence_level,
                 "score": verification.confidence_score or 0.0,
                 "reason": verification.confidence_reason or "",
+                "alignment_score": alignment["percentage"],
+                "alignment_tier": alignment["tier"],
+                "alignment_display": alignment["display_text"],
+                "is_scoreable": alignment["is_scoreable"],
             },
+            "alignment_score": alignment["percentage"],
+            "alignment_tier": alignment["tier"],
+            "alignment_display": alignment["display_text"],
+            "is_scoreable": alignment["is_scoreable"],
+            "traceability_node_id": f"claim_{claim.id}",
             "issues": issues,
             "human_review_required": verification.human_review_required,
+        }
+
+    def build_traceability_graph(self, db: Session, document_id: str) -> dict:
+        """
+        Builds the Claim-to-Evidence Traceability Graph (DAG):
+        Document -> Claim -> Citation Occurrence -> Bibliographic Reference -> Original Publication -> Evidence Passage -> Verdict.
+        """
+        document = db.query(Document).filter(Document.id == document_id).first()
+        if not document:
+            return {"nodes": [], "edges": []}
+
+        nodes = []
+        edges = []
+
+        doc_node_id = f"doc_{document.id}"
+        nodes.append({
+            "id": doc_node_id,
+            "type": "document",
+            "label": document.document_title or document.filename,
+            "data": {
+                "filename": document.filename,
+                "page_count": document.page_count,
+            },
+        })
+
+        claims = db.query(Claim).filter(Claim.document_id == document_id).all()
+        for c in claims:
+            c_node_id = f"claim_{c.id}"
+            nodes.append({
+                "id": c_node_id,
+                "type": "claim",
+                "label": c.claim_text[:80] + ("..." if len(c.claim_text) > 80 else ""),
+                "data": {
+                    "claim_text": c.claim_text,
+                    "page_number": c.page_number,
+                    "category": c.category,
+                },
+            })
+            edges.append({
+                "source": doc_node_id,
+                "target": c_node_id,
+                "type": "CONTAINS",
+            })
+
+            # Citations for claim
+            citations = c.citations or []
+            for cit in citations:
+                cit_node_id = f"cit_{cit.id}"
+                nodes.append({
+                    "id": cit_node_id,
+                    "type": "citation",
+                    "label": cit.citation_marker or "Citation",
+                    "data": {
+                        "citation_marker": cit.citation_marker,
+                        "doi": cit.doi,
+                        "matching_status": cit.matching_status,
+                    },
+                })
+                edges.append({
+                    "source": c_node_id,
+                    "target": cit_node_id,
+                    "type": "CITES",
+                })
+
+            # Verification for claim
+            if c.verifications:
+                v = c.verifications[-1]
+                v_node_id = f"verdict_{v.id}"
+                v_label = f"{v.verdict}"
+                nodes.append({
+                    "id": v_node_id,
+                    "type": "verdict",
+                    "label": v_label,
+                    "data": {
+                        "verdict": v.verdict,
+                        "confidence_score": v.confidence_score,
+                        "confidence_level": v.confidence_level,
+                    },
+                })
+                edges.append({
+                    "source": c_node_id,
+                    "target": v_node_id,
+                    "type": "YIELDS_VERDICT",
+                })
+
+                # Source publication for verification
+                if v.source:
+                    s = v.source
+                    s_node_id = f"src_{s.id}"
+                    nodes.append({
+                        "id": s_node_id,
+                        "type": "source",
+                        "label": s.title[:60] + ("..." if len(s.title) > 60 else ""),
+                        "data": {
+                            "title": s.title,
+                            "doi": s.doi,
+                            "evidence_type": s.evidence_type,
+                            "url": s.source_url,
+                        },
+                    })
+                    edges.append({
+                        "source": s_node_id,
+                        "target": v_node_id,
+                        "type": "GROUNDS_VERDICT",
+                    })
+
+                    # If citations exist, link them to the resolved source
+                    for cit in citations:
+                        edges.append({
+                            "source": f"cit_{cit.id}",
+                            "target": s_node_id,
+                            "type": "RESOLVES_TO",
+                        })
+
+        return {
+            "document_id": document_id,
+            "total_nodes": len(nodes),
+            "total_edges": len(edges),
+            "nodes": nodes,
+            "edges": edges,
         }
 
     async def verify_direct_claim(

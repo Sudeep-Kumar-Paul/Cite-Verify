@@ -19,6 +19,10 @@ export interface ConfidenceInfo {
   level: "HIGH" | "MEDIUM" | "LOW" | string;
   score: number;
   reason: string;
+  alignment_score?: number | null;
+  alignment_tier?: "STRONG" | "MODERATE" | "WEAK" | "NOT_SCOREABLE" | string | null;
+  alignment_display?: string | null;
+  is_scoreable?: boolean;
 }
 
 export interface EvidencePassage {
@@ -44,7 +48,28 @@ export interface VerificationResult {
   evidence_passages: EvidencePassage[];
   confidence: ConfidenceInfo;
   issues: string[];
+  limitations?: string[];
   human_review_required: boolean;
+  traceability_node_id?: string | null;
+}
+
+export interface TraceabilityNode {
+  id: string;
+  type: "document" | "claim" | "citation" | "source" | "passage" | "verdict";
+  label: string;
+  data: Record<string, any>;
+}
+
+export interface TraceabilityEdge {
+  source: string;
+  target: string;
+  relationship: string;
+}
+
+export interface TraceabilityGraph {
+  document_id: string;
+  nodes: TraceabilityNode[];
+  edges: TraceabilityEdge[];
 }
 
 export interface VerificationResponse {
@@ -319,6 +344,10 @@ export const api = {
   getReportDownloadUrl(documentId: string): string {
     const baseUrl = getApiBaseUrl().replace(/\/$/, "");
     return `${baseUrl}/api/reports/${encodeURIComponent(documentId)}/download`;
+  },
+
+  async getTraceabilityGraph(documentId: string): Promise<TraceabilityGraph> {
+    return request<TraceabilityGraph>(`/api/verification/documents/${encodeURIComponent(documentId)}/graph`);
   },
 
   async getHistory(): Promise<HistoryItem[]> {

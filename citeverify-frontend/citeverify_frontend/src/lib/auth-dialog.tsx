@@ -202,7 +202,7 @@ export function AuthDialog({ open, onOpenChange, defaultTab = "signin" }: AuthDi
               <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
               <span>{error}</span>
             </div>
-            {error.includes("127.0.0.1") && (
+            {typeof window !== "undefined" && window.location.hostname === "127.0.0.1" && (
               <div className="flex flex-wrap items-center gap-2 pt-1 border-t border-destructive/20">
                 <Button
                   type="button"
@@ -225,6 +225,19 @@ export function AuthDialog({ open, onOpenChange, defaultTab = "signin" }: AuthDi
                   onClick={handleDemoSignIn}
                 >
                   Instant Demo Sign-In
+                </Button>
+              </div>
+            )}
+            {error.includes("not authorized in Firebase") && typeof window !== "undefined" && window.location.hostname !== "127.0.0.1" && (
+              <div className="flex flex-wrap items-center gap-2 pt-1 border-t border-destructive/20">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="h-7 text-xs border-destructive/30 hover:bg-destructive/20"
+                  onClick={handleDemoSignIn}
+                >
+                  Instant Demo Sign-In (Bypass)
                 </Button>
               </div>
             )}

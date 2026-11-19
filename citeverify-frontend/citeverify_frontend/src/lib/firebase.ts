@@ -63,8 +63,10 @@ export function getFirebaseErrorMessage(errorCode: string, rawMessage?: string):
   }
 
   switch (code) {
-    case "auth/unauthorized-domain":
-      return "This domain (127.0.0.1) is not authorized in Firebase. Open http://localhost:5173 in your browser, or add 127.0.0.1 to Firebase Console → Authentication → Settings → Authorized domains.";
+    case "auth/unauthorized-domain": {
+      const currentHost = typeof window !== "undefined" ? window.location.hostname : "this domain";
+      return `This domain (${currentHost}) is not authorized in Firebase. In Firebase Console → Authentication → Settings → Authorized domains, click 'Add domain' and add: ${currentHost}`;
+    }
     case "auth/operation-not-allowed":
       return "This sign-in provider (Google or Email) is not enabled in Firebase Console. Go to Authentication → Sign-in method and enable it.";
     case "auth/invalid-email":

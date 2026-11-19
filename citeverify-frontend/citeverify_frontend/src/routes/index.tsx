@@ -36,6 +36,8 @@ import { Button } from "@/button";
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from "@/dialog";
 import { Switch } from "@/switch";
 import { UserMenu } from "@/lib/user-menu";
+import { useAuth } from "@/lib/auth-context";
+import { AuthDialog } from "@/lib/auth-dialog";
 import { api, type VerificationResult } from "@/lib/api";
 import {
   claims as defaultClaims,
@@ -126,6 +128,8 @@ function mapVerificationResultToClaimItem(v: VerificationResult | any, index: nu
 }
 
 function Index() {
+  const { user, loading: authLoading } = useAuth();
+  const [authDialogOpen, setAuthDialogOpen] = useState(true);
   const [screen, setScreen] = useState<"upload" | "processing" | "workspace">("upload");
   const [modal, setModal] = useState<"how" | "trust" | "upload" | "menu" | null>(null);
   const [file, setFile] = useState<{ name: string; size: number; demo?: boolean } | null>(null);
@@ -471,6 +475,47 @@ function Index() {
       </button>
     );
   }
+  // --- AUTH GATE: Block all access when user is not signed in ---
+  if (authLoading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background">
+        <div className="flex flex-col items-center gap-4 text-center">
+          <div className="h-12 w-12 rounded-full bg-primary/10 text-primary flex items-center justify-center">
+            <ShieldCheck className="h-6 w-6 text-primary" />
+          </div>
+          <div className="flex items-center gap-2 text-muted-foreground text-sm">
+            <LoaderCircle className="h-4 w-4 animate-spin" />
+            <span>Loading CiteVerify…</span>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (!user) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background px-4">
+        <div className="max-w-md w-full text-center space-y-6">
+          <div className="flex flex-col items-center gap-3">
+            <div className="h-16 w-16 rounded-full bg-primary/10 text-primary flex items-center justify-center">
+              <ShieldCheck className="h-8 w-8 text-primary" />
+            </div>
+            <h1 className="text-3xl font-bold tracking-tight text-foreground">CiteVerify</h1>
+            <p className="text-muted-foreground text-sm max-w-sm">
+              Verify scientific claims, audit research papers, and track evidence. Sign in to get started.
+            </p>
+          </div>
+          <Button size="lg" className="w-full max-w-xs mx-auto" onClick={() => setAuthDialogOpen(true)}>
+            Sign In to Continue
+            <ArrowRight className="h-4 w-4 ml-2" />
+          </Button>
+          <AuthDialog open={authDialogOpen} onOpenChange={setAuthDialogOpen} />
+        </div>
+      </div>
+    );
+  }
+  // --- END AUTH GATE ---
+
   return (
     <>
       <header className={`topbar ${screen === "workspace" ? "workspace-header" : ""}`}>

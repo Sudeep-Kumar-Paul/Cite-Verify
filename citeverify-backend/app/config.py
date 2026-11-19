@@ -28,7 +28,7 @@ class Settings(BaseSettings):
 
     # Gemini
     gemini_api_key: str = ""
-    gemini_model: str = "gemini-2.5-flash"
+    gemini_model: str = "gemini-2.0-flash"
 
     # CORS
     cors_origins: Union[List[str], str] = [

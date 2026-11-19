@@ -81,7 +81,7 @@ class GeminiService:
 
     def __init__(self):
         self.api_key = settings.gemini_api_key
-        self.model = settings.gemini_model or "gemini-2.0-flash"
+        self.model = settings.gemini_model or "gemini-3.8-flash"
         self._client = None
         if self.api_key:
             try:
@@ -104,8 +104,9 @@ class GeminiService:
 
     def _call_gemini_api(self, contents: str, config: dict):
         models_to_try = [self.model]
-        if "gemini-2.0-flash" not in models_to_try:
-            models_to_try.append("gemini-2.0-flash")
+        for fallback in ["gemini-3.8-flash", "gemini-2.5-flash", "gemini-2.0-flash"]:
+            if fallback not in models_to_try:
+                models_to_try.append(fallback)
         
         last_error = None
         for m in models_to_try:

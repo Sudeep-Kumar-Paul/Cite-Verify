@@ -18,13 +18,13 @@ import {
 const env = import.meta.env;
 
 export const firebaseConfig = {
-  apiKey: env.VITE_FIREBASE_API_KEY || "",
-  authDomain: env.VITE_FIREBASE_AUTH_DOMAIN || "",
-  projectId: env.VITE_FIREBASE_PROJECT_ID || "",
-  storageBucket: env.VITE_FIREBASE_STORAGE_BUCKET || "",
-  messagingSenderId: env.VITE_FIREBASE_MESSAGING_SENDER_ID || "",
-  appId: env.VITE_FIREBASE_APP_ID || "",
-  measurementId: env.VITE_FIREBASE_MEASUREMENT_ID || "",
+  apiKey: env.VITE_FIREBASE_API_KEY || "AIzaSyCMOczuv10ATUhQb5kAn3fewvYIWxgrpbE",
+  authDomain: env.VITE_FIREBASE_AUTH_DOMAIN || "gen-lang-client-0405702773.firebaseapp.com",
+  projectId: env.VITE_FIREBASE_PROJECT_ID || "gen-lang-client-0405702773",
+  storageBucket: env.VITE_FIREBASE_STORAGE_BUCKET || "gen-lang-client-0405702773.firebasestorage.app",
+  messagingSenderId: env.VITE_FIREBASE_MESSAGING_SENDER_ID || "865645163640",
+  appId: env.VITE_FIREBASE_APP_ID || "1:865645163640:android:6cf2937440f6edc2ff698d",
+  measurementId: env.VITE_FIREBASE_MEASUREMENT_ID || "G-J90FPQTPR1",
 };
 
 // Check if valid Firebase configuration is provided

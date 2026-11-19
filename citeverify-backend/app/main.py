@@ -64,13 +64,28 @@ app = FastAPI(
 )
 
 # CORS middleware
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=settings.cors_origins,
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+is_cors_wildcard = (
+    "*" in settings.cors_origins
+    if isinstance(settings.cors_origins, list)
+    else settings.cors_origins == "*"
 )
+
+if is_cors_wildcard:
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origin_regex=".*",
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+else:
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=settings.cors_origins,
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
 
 # Register custom exception handlers
 add_exception_handlers(app)
@@ -114,5 +129,7 @@ async def root() -> dict:
 
 
 if __name__ == "__main__":
+    import os
     import uvicorn
-    uvicorn.run("app.main:app", host="0.0.0.0", port=8000, reload=True)
+    port = int(os.environ.get("PORT", 8000))
+    uvicorn.run("app.main:app", host="0.0.0.0", port=port, reload=settings.debug)

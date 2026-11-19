@@ -132,7 +132,16 @@ export interface HealthResponse {
 
 export function getApiBaseUrl(): string {
   const envUrl = typeof import.meta !== "undefined" && import.meta.env ? import.meta.env.VITE_API_BASE_URL : "";
-  return envUrl || "http://localhost:8000";
+  if (envUrl) {
+    if (typeof window !== "undefined" && window.location.hostname === "127.0.0.1" && envUrl.includes("localhost")) {
+      return envUrl.replace("localhost", "127.0.0.1");
+    }
+    return envUrl;
+  }
+  if (typeof window !== "undefined" && window.location.hostname === "127.0.0.1") {
+    return "http://127.0.0.1:8000";
+  }
+  return "http://localhost:8000";
 }
 
 let authTokenProvider: (() => Promise<string | null>) | null = null;
@@ -143,7 +152,7 @@ export function setAuthTokenProvider(provider: () => Promise<string | null>) {
 
 async function request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
   const baseUrl = getApiBaseUrl().replace(/\/$/, "");
-  const url = `${baseUrl}${endpoint.startsWith("/") ? endpoint : `/${endpoint}`}`;
+  let url = `${baseUrl}${endpoint.startsWith("/") ? endpoint : `/${endpoint}`}`;
 
   const headers = new Headers(options.headers || {});
   if (!(options.body instanceof FormData) && !headers.has("Content-Type")) {
@@ -161,10 +170,32 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
     }
   }
 
-  const response = await fetch(url, {
-    ...options,
-    headers,
-  });
+  let response: Response;
+  try {
+    response = await fetch(url, {
+      ...options,
+      headers,
+    });
+  } catch (err: any) {
+    // If fetching failed due to IPv6 localhost connection refusal, retry with 127.0.0.1 or localhost
+    if (url.includes("localhost:8000")) {
+      const fallbackUrl = url.replace("localhost:8000", "127.0.0.1:8000");
+      try {
+        response = await fetch(fallbackUrl, { ...options, headers });
+      } catch {
+        throw new Error("Unable to connect to CiteVerify backend. Ensure backend is running on port 8000.");
+      }
+    } else if (url.includes("127.0.0.1:8000")) {
+      const fallbackUrl = url.replace("127.0.0.1:8000", "localhost:8000");
+      try {
+        response = await fetch(fallbackUrl, { ...options, headers });
+      } catch {
+        throw new Error("Unable to connect to CiteVerify backend. Ensure backend is running on port 8000.");
+      }
+    } else {
+      throw new Error(err?.message || "Unable to connect to CiteVerify backend server.");
+    }
+  }
 
   if (!response.ok) {
     let errorDetail = `Request failed with status ${response.status}`;

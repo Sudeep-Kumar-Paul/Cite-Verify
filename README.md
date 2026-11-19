@@ -152,6 +152,81 @@ Open your browser at `http://127.0.0.1:5173`.
 
 ---
 
+## 🚢 Production Deployment Guide
+
+CiteVerify can be deployed in three production-grade ways:
+
+### 🌟 Option 1: 1-Click Render Cloud Deployment (Recommended)
+
+Render is pre-configured with the included [`render.yaml`](render.yaml) Blueprint. It automatically creates:
+- **FastAPI Backend:** Runs Python 3.11 with a persistent SSD disk attached at `/var/data` (preserving SQLite records and uploaded manuscripts across redeploys).
+- **React Frontend:** Builds with Node 20 SSR and automatically connects to the backend URL.
+- **SSL & Domains:** Automatic free HTTPS certificates on `*.onrender.com`.
+
+**Steps to deploy on Render:**
+1. Push your repository to GitHub or GitLab.
+2. Go to the [Render Dashboard](https://dashboard.render.com/) and click **New + → Blueprint**.
+3. Connect your CiteVerify repository. Render detects [`render.yaml`](render.yaml) automatically.
+4. Fill in the required environment variables:
+   - `GEMINI_API_KEY`: Your Google Gemini API Key from [Google AI Studio](https://aistudio.google.com/).
+   - `VITE_FIREBASE_*`: *(Optional)* Your Firebase project credentials (leave blank for built-in Demo Auth mode).
+5. Click **Apply**. Render will automatically build and launch both services!
+
+---
+
+### 🐳 Option 2: Docker & Docker Compose (Self-Hosted VPS / Cloud Server)
+
+Deploy CiteVerify to any Ubuntu/Debian VPS (DigitalOcean, AWS EC2, Hetzner, Linode) or on-premise server:
+
+1. **Clone the repository on your server:**
+   ```bash
+   git clone https://github.com/Sudeep-Kumar-Paul/Cite-Verify.git
+   cd Cite-Verify
+   ```
+
+2. **Configure your environment variables:**
+   ```bash
+   cp .env.example .env
+   nano .env
+   ```
+   Set your `GEMINI_API_KEY` and set `VITE_API_BASE_URL` to your public server IP or domain (e.g. `http://your-server-ip:8000` or `https://api.yourdomain.com`).
+
+3. **Build and launch the containers:**
+   ```bash
+   docker compose up -d --build
+   ```
+
+4. **Verify the status:**
+   ```bash
+   docker compose ps
+   docker compose logs -f
+   ```
+   - Frontend is live on `http://your-server-ip:3000`
+   - Backend API is live on `http://your-server-ip:8000` (docs at `/docs`)
+
+---
+
+### ⚡ Option 3: Split Deployment (Vercel Frontend + Render/Railway Backend)
+
+If you prefer deploying the frontend to a global edge CDN:
+
+1. **Deploy Backend (Render or Railway):**
+   - Connect `citeverify-backend/` to Render Web Service or Railway.
+   - Set Build Command: `pip install -r requirements.txt`
+   - Set Start Command: `uvicorn app.main:app --host 0.0.0.0 --port $PORT --workers 2`
+   - Add a persistent disk mounted to `/app/uploads` and set `DATABASE_URL=sqlite:////app/uploads/citeverify.db`.
+   - Set `GEMINI_API_KEY=your_key` and `CORS_ORIGINS=https://your-frontend.vercel.app`.
+   - Note the assigned backend URL (e.g. `https://citeverify-api.onrender.com`).
+
+2. **Deploy Frontend (Vercel):**
+   - Import the repository in [Vercel](https://vercel.com/).
+   - Set Root Directory to `citeverify-frontend/citeverify_frontend`.
+   - Set Environment Variable:
+     - `VITE_API_BASE_URL` = `https://citeverify-api.onrender.com`
+   - Deploy!
+
+---
+
 ## 🧪 Testing
 
 ### Backend Unit & Integration Tests (Pytest)

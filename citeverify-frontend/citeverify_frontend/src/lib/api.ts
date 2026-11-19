@@ -153,8 +153,12 @@ export function getApiBaseUrl(): string {
     }
     return envUrl;
   }
-  if (typeof window !== "undefined" && window.location.hostname === "127.0.0.1") {
-    return "http://127.0.0.1:8000";
+  if (typeof window !== "undefined") {
+    if (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1") {
+      return window.location.hostname === "127.0.0.1" ? "http://127.0.0.1:8000" : "http://localhost:8000";
+    }
+    // In production without explicit VITE_API_BASE_URL, default to same-origin (ideal for reverse proxies)
+    return "";
   }
   return "http://localhost:8000";
 }

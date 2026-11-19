@@ -114,9 +114,9 @@ try {
         exit 1
     }
 
-    # 7. Start Frontend: cmd.exe /c npm run dev -- --host 127.0.0.1 with WorkingDirectory = $frontendDir
+    # 7. Start Frontend: cmd.exe /c npm run dev -- --host 0.0.0.0 with WorkingDirectory = $frontendDir
     # 8. Use Start-Process with explicit WorkingDirectory and PassThru
-    $frontendArgs = @("/c", "npm run dev -- --host 127.0.0.1")
+    $frontendArgs = @("/c", "npm run dev -- --host 0.0.0.0")
     $frontendProc = Start-Process -FilePath "cmd.exe" `
                                   -ArgumentList $frontendArgs `
                                   -WorkingDirectory $frontendDir `
@@ -135,7 +135,8 @@ try {
     Write-Host "============================================================" -ForegroundColor Green
     Write-Host " CiteVerify Stack Running Successfully:" -ForegroundColor White
     Write-Host "   -> Backend:  http://127.0.0.1:8000  (API Docs: http://127.0.0.1:8000/docs)" -ForegroundColor Cyan
-    Write-Host "   -> Frontend: http://127.0.0.1:5173" -ForegroundColor Magenta
+    Write-Host "   -> Frontend: http://localhost:5173  (or http://127.0.0.1:5173)" -ForegroundColor Magenta
+    Write-Host "   -> Note:     Use http://localhost:5173 for Firebase Auth compatibility." -ForegroundColor Yellow
     Write-Host "   -> Backend PID:  $($backendProc.Id)" -ForegroundColor Gray
     Write-Host "   -> Frontend PID: $($frontendProc.Id)" -ForegroundColor Gray
     Write-Host "============================================================" -ForegroundColor Green

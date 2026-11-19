@@ -353,6 +353,19 @@ export function AuthDialog({ open, onOpenChange, defaultTab = "signin" }: AuthDi
                     {loading ? <LoaderCircle className="h-4 w-4 animate-spin mr-2" /> : null}
                     Sign In
                   </Button>
+                  <p className="text-center text-xs text-muted-foreground pt-1">
+                    Don't have an account yet?{" "}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setActiveTab("signup");
+                        setError(null);
+                      }}
+                      className="text-primary hover:underline font-medium"
+                    >
+                      Create Account
+                    </button>
+                  </p>
                 </form>
               </TabsContent>
 
@@ -418,6 +431,19 @@ export function AuthDialog({ open, onOpenChange, defaultTab = "signin" }: AuthDi
                     {loading ? <LoaderCircle className="h-4 w-4 animate-spin mr-2" /> : null}
                     Create Free Account
                   </Button>
+                  <p className="text-center text-xs text-muted-foreground pt-1">
+                    Already have an account?{" "}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setActiveTab("signin");
+                        setError(null);
+                      }}
+                      className="text-primary hover:underline font-medium"
+                    >
+                      Sign In
+                    </button>
+                  </p>
                 </form>
               </TabsContent>
             </Tabs>

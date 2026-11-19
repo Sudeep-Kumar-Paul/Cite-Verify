@@ -110,7 +110,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       await signInWithEmailAndPassword(auth, email.trim(), pass);
     } catch (err: any) {
-      const message = getFirebaseErrorMessage(err?.code || "");
+      const message = getFirebaseErrorMessage(err?.code || "", err?.message);
       throw new Error(message || err?.message || "Failed to sign in.");
     }
   };
@@ -135,7 +135,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         });
       }
     } catch (err: any) {
-      const message = getFirebaseErrorMessage(err?.code || "");
+      const message = getFirebaseErrorMessage(err?.code || "", err?.message);
       throw new Error(message || err?.message || "Failed to create account.");
     }
   };
@@ -149,7 +149,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       await signInWithPopup(auth, googleProvider);
     } catch (err: any) {
-      const message = getFirebaseErrorMessage(err?.code || "");
+      const message = getFirebaseErrorMessage(err?.code || "", err?.message);
       throw new Error(message || err?.message || "Failed to sign in with Google.");
     }
   };
@@ -178,7 +178,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       await sendPasswordResetEmail(auth, email.trim());
     } catch (err: any) {
-      const message = getFirebaseErrorMessage(err?.code || "");
+      const message = getFirebaseErrorMessage(err?.code || "", err?.message);
       throw new Error(message || err?.message || "Failed to send password reset email.");
     }
   };

@@ -50,34 +50,54 @@ if (isFirebaseConfigured) {
 }
 
 /**
- * Format common Firebase authentication error codes into clear messages
+ * Format common Firebase authentication error codes into clear, actionable messages
  */
-export function getFirebaseErrorMessage(errorCode: string): string {
+export function getFirebaseErrorMessage(errorCode: string, rawMessage?: string): string {
   switch (errorCode) {
+    case "auth/unauthorized-domain":
+      return "This domain (127.0.0.1) is not authorized in Firebase. Open http://localhost:5173 in your browser, or add 127.0.0.1 to Firebase Console → Authentication → Settings → Authorized domains.";
+    case "auth/operation-not-allowed":
+      return "This sign-in provider (Google or Email) is not enabled in Firebase Console. Go to Authentication → Sign-in method and enable it.";
     case "auth/invalid-email":
       return "The email address is invalid.";
     case "auth/user-disabled":
       return "This user account has been disabled.";
     case "auth/user-not-found":
+      return "No account found with this email. Click the 'Create Account' tab to register.";
     case "auth/wrong-password":
+      return "Incorrect password. Please try again or use 'Forgot password?'.";
     case "auth/invalid-credential":
-      return "Incorrect email or password. Please try again.";
+      return "Invalid email or password. If you haven't created an account yet, click the 'Create Account' tab above.";
     case "auth/email-already-in-use":
-      return "An account with this email address already exists.";
+      return "An account with this email address already exists. Please sign in instead.";
     case "auth/weak-password":
       return "Password should be at least 6 characters.";
-    case "auth/operation-not-allowed":
-      return "This sign-in method is not enabled in Firebase Console.";
     case "auth/popup-closed-by-user":
       return "The Google sign-in window was closed before completion.";
+    case "auth/cancelled-popup-request":
+      return "Google sign-in popup was cancelled.";
     case "auth/popup-blocked":
-      return "Google sign-in popup was blocked by your browser. Please allow popups.";
+      return "Google sign-in popup was blocked by your browser. Please allow popups for this site.";
     case "auth/network-request-failed":
       return "Network error. Please check your internet connection.";
     case "auth/too-many-requests":
       return "Too many unsuccessful attempts. Please try again in a few minutes.";
+    case "auth/configuration-not-found":
+      return "Firebase Authentication is not enabled for this project. Please enable it in the Firebase Console.";
+    case "auth/project-not-found":
+      return "Firebase project not found. Please verify your Project ID in .env.";
+    case "auth/invalid-api-key":
+      return "Invalid Firebase API key in .env. Please check your Firebase Project Settings.";
+    case "auth/account-exists-with-different-credential":
+      return "An account already exists with the same email using a different sign-in method.";
     default:
-      return "Authentication error. Please try again.";
+      if (rawMessage && !rawMessage.startsWith("Firebase: Error")) {
+        return rawMessage;
+      }
+      if (errorCode) {
+        return `Firebase error (${errorCode}). ${rawMessage || "Please check your Firebase project configuration."}`;
+      }
+      return rawMessage || "Authentication error. Please try again.";
   }
 }
 

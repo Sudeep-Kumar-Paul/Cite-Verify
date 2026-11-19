@@ -231,11 +231,11 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
     if (response.status === 404) {
       if (
         typeof window !== "undefined" &&
-        (baseUrl === window.location.origin || baseUrl.includes(window.location.hostname) || baseUrl.includes("cite-verify-production"))
+        (baseUrl === window.location.origin || baseUrl.includes(window.location.hostname) || baseUrl.includes("vercel.app"))
       ) {
-        errorDetail = `404 Not Found: VITE_API_URL is pointing to your frontend URL (${baseUrl}) instead of the backend service. In Railway, click on your Backend service -> Settings -> Networking to copy its domain (e.g. https://citeverify-backend-production-xxxx.up.railway.app), set that as VITE_API_URL on your Frontend service, and redeploy.`;
+        errorDetail = `404 Not Found: VITE_API_URL is pointing to your Vercel frontend URL (${baseUrl}) instead of your backend service. On Render, copy your backend service URL (e.g. https://<backend-name>.onrender.com), set that as VITE_API_URL in Vercel Environment Variables, and redeploy.`;
       } else {
-        errorDetail = `404 Not Found from ${url}. Ensure the backend service has finished deploying and that VITE_API_URL points to the correct backend domain.`;
+        errorDetail = `404 Not Found from ${url}. Ensure your Render backend service is deployed and that VITE_API_URL points to your Render backend URL.`;
       }
     }
 

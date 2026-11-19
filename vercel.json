@@ -1,0 +1,5 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "buildCommand": "cd citeverify-frontend/citeverify_frontend && npm install && npm run build",
+  "outputDirectory": "citeverify-frontend/citeverify_frontend/.vercel/output"
+}

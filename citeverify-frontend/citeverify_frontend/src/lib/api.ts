@@ -143,6 +143,11 @@ export function getApiBaseUrl(): string {
   }
 
   if (envUrl) {
+    // If user provided a domain without protocol (e.g. my-app.up.railway.app), prepend https://
+    if (!/^https?:\/\//i.test(envUrl) && !envUrl.startsWith("/")) {
+      envUrl = `https://${envUrl}`;
+    }
+
     if (typeof window !== "undefined" && window.location.hostname === "127.0.0.1" && envUrl.includes("localhost")) {
       return envUrl.replace("localhost", "127.0.0.1");
     }
@@ -226,9 +231,9 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
     if (response.status === 404) {
       if (
         typeof window !== "undefined" &&
-        (baseUrl === window.location.origin || baseUrl.includes("cite-verify-production.up.railway.app"))
+        (baseUrl === window.location.origin || baseUrl.includes(window.location.hostname) || baseUrl.includes("cite-verify-production"))
       ) {
-        errorDetail = `404 Not Found: VITE_API_URL is pointing to your frontend URL instead of the backend service. In Railway, open your Backend service -> Settings -> Networking to get its domain (e.g. https://citeverify-backend-production-xxxx.up.railway.app), set that as VITE_API_URL on the Frontend service, and redeploy.`;
+        errorDetail = `404 Not Found: VITE_API_URL is pointing to your frontend URL (${baseUrl}) instead of the backend service. In Railway, click on your Backend service -> Settings -> Networking to copy its domain (e.g. https://citeverify-backend-production-xxxx.up.railway.app), set that as VITE_API_URL on your Frontend service, and redeploy.`;
       } else {
         errorDetail = `404 Not Found from ${url}. Ensure the backend service has finished deploying and that VITE_API_URL points to the correct backend domain.`;
       }

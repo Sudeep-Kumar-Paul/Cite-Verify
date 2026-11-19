@@ -15,6 +15,14 @@ export default defineConfig({
     server: {
       port: 5173,
     },
+    preview: {
+      port: 5173,
+      allowedHosts: [
+        "cite-verify-production.up.railway.app",
+        ".railway.app",
+        "localhost",
+      ],
+    },
     resolve: {
       alias: {
         "@/components/ui": path.resolve(__dirname, "./src"),
